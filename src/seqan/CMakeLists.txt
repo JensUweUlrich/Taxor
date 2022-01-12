@@ -30,7 +30,7 @@ else()
 endif()
 target_include_directories( sdsl SYSTEM INTERFACE ${CMAKE_CURRENT_BINARY_DIR}/sdsl-lite/include )
 
-
+if (WIN32)
 set(ZLIB_ROOT "${CMAKE_CURRENT_BINARY_DIR}/zlib")
 add_library(zlib STATIC IMPORTED GLOBAL)
 if (WIN32)
@@ -40,9 +40,11 @@ else()
     set_target_properties(zlib PROPERTIES IMPORTED_LOCATION "${ZLIB_ROOT}/lib/libz.a")
     set(ZLIB_LIBRARIES zlib)
 endif()
-set(ZLIB_INCLUDE_DIRS "${ZLIB_ROOT}/include")
 
-find_package(zlib REQUIRED)
+set(ZLIB_INCLUDE_DIRS "${ZLIB_ROOT}/include")
+endif()
+
+find_package(ZLIB REQUIRED)
 
 set(CMAKE_PREFIX_PATH ${CMAKE_CURRENT_BINARY_DIR}/seqan2/seqan2-src/util/cmake)
 set(SEQAN_INCLUDE_PATH ${CMAKE_CURRENT_BINARY_DIR}/seqan2/seqan2-src/include)

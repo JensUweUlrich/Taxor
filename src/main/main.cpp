@@ -251,7 +251,7 @@ struct Seqs {
 	   @stats:         statistics (like runtime for specific tasks) for building the ibf
 	   @throws:        FileParserException
    */
- void parse_ref_seqs(std::vector< Seqs >& queue_refs, std::string& reference_file)
+ void parse_ref_seqs(std::vector< Seqs >& queue_refs, const std::string& reference_file)
  {
 	 seqan::SeqFileIn seqFileIn;
 	 // open input file in first iteration

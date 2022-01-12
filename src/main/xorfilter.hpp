@@ -149,6 +149,8 @@ Status XorFilter<ItemType, FingerprintType, HashFamily>::AddAll(
     size_t reverseOrderPos;
     hashIndex = 0;
     
+    //cout << "Seed : " << hasher->seed << endl;
+    hasher->seed = 11766490319846427158;
     //t2val_t * t2vals = new t2val_t[m];
     // temporary array H
     std::vector<t2val_t> t2vals_vec(m);
