@@ -1,0 +1,31 @@
+
+project(seqan2-download NONE)
+include(ExternalProject)
+
+ExternalProject_Add(sdsl-lite
+  GIT_REPOSITORY    https://github.com/simongog/sdsl-lite.git
+  GIT_TAG           v2.1.1
+  SOURCE_DIR        "${CMAKE_CURRENT_BINARY_DIR}/sdsl-lite"
+  CMAKE_CACHE_ARGS  ${sdsl_cache_args}
+  INSTALL_COMMAND	""
+)
+
+ExternalProject_Add(seqan2
+  GIT_REPOSITORY    https://github.com/JensUweUlrich/seqan.git
+  GIT_TAG           SeqAn
+  SOURCE_DIR        "${CMAKE_CURRENT_BINARY_DIR}/seqan2/seqan2-src"
+  CMAKE_ARGS		    "-DCMAKE_PREFIX_PATH=<SOURCE_DIR>/util/cmake" 
+                    "-DSEQAN_INCLUDE_PATH=${CMAKE_CURRENT_BINARY_DIR}/seqan2/seqan2-src/include"
+  CONFIGURE_COMMAND	""
+  BUILD_COMMAND		""
+  INSTALL_COMMAND	""
+)
+
+ExternalProject_Add(zlib
+  PREFIX zlib
+  GIT_REPOSITORY    https://github.com/madler/zlib.git
+  GIT_TAG           master
+  SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/zlib"
+  CMAKE_CACHE_ARGS
+        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/zlib
+)

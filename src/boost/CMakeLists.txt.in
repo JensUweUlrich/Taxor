@@ -1,0 +1,15 @@
+
+project(boost-build NONE)
+include(ExternalProject)
+
+ExternalProject_Add(Boost
+  PREFIX            Boost
+  GIT_REPOSITORY    https://github.com/boostorg/boost.git
+  GIT_TAG           boost-1.76.0
+  SOURCE_DIR        "${CMAKE_CURRENT_BINARY_DIR}/boost"
+  BUILD_IN_SOURCE   1
+  CONFIGURE_COMMAND ./${BOOST_CONFIGURE_CMD}
+  BUILD_COMMAND     ./b2 install ${BOOST_BUILD_FLAGS}
+  INSTALL_COMMAND   ""
+#  DEPENDS zlib
+)
