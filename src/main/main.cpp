@@ -8,10 +8,15 @@
 #include <set>
 #include <map>
 #include <filesystem>
-#include <seqan/binning_directory.h>
+#include <seqan3/io/sequence_file/all.hpp>
+#include <seqan3/alphabet/nucleotide/all.hpp>
+#include <seqan3/search/views/kmer_hash.hpp>
+#include <seqan3/core/debug_stream.hpp>
 
 #include <zlib.h>
 #include "xorfilter.hpp"
+
+using namespace seqan3::literals;
 
 std::string gtdb_root = "D:\\gtdb_genomes_reps_r202";
 
@@ -25,7 +30,7 @@ struct species
 struct Seqs {
 	
 	std::string       seqid;
-	seqan::DnaString seq;
+	seqan3::dna4_vector seq;
 	
 };
 
@@ -47,7 +52,7 @@ struct Seqs {
 	}
 }
 
-
+/*
  bool gzipInflate(const std::string& compressedBytes, std::string& uncompressedBytes) {
 	 if (compressedBytes.size() == 0) {
 		 uncompressedBytes = compressedBytes;
@@ -109,8 +114,9 @@ struct Seqs {
 	 free(uncomp);
 	 return true;
  }
-
+*/
  /* Reads a file into memory. */
+ /*
  bool loadBinaryFile(const std::string& filename, std::string& contents) {
 	 // Open the gzip file in binary mode  
 	 FILE* f = fopen(filename.c_str(), "rb");
@@ -130,9 +136,10 @@ struct Seqs {
 
 	 return true;
  }
-
+*/
  /** Compress a STL string using zlib with given compression level and return
  * the binary data. */
+ /*
  std::string compress_string(const std::string& str, int compressionlevel = Z_BEST_COMPRESSION)
  {
 	 z_stream zs;                        // z_stream is zlib's control structure
@@ -171,7 +178,7 @@ struct Seqs {
 
 	 return outstring;
  }
-
+*/
 
  void getGenomeRepsByGenus(std::string& filename, std::map<std::string, std::vector<species>>& genera)
  {
@@ -251,9 +258,12 @@ struct Seqs {
 	   @stats:         statistics (like runtime for specific tasks) for building the ibf
 	   @throws:        FileParserException
    */
- void parse_ref_seqs(std::vector< Seqs >& queue_refs, const std::string& reference_file)
+ /*
+ void parse_ref_seqs(std::vector< Seqs >& queue_refs, const std::filesystem::path& reference_file)
  {
-	 seqan::SeqFileIn seqFileIn;
+	 //seqan::SeqFileIn seqFileIn;
+	 auto filename = std::filesystem::current_path() / "my.fasta";
+	 seqan3::sequence_file_input fin_from_filename{filename};
 	 // open input file in first iteration
 	 if (!seqan::open(seqFileIn, seqan::toCString(reference_file)))
 	 {
@@ -306,7 +316,7 @@ struct Seqs {
 			 
  }
 
-
+*/
 int main(int argc, char const **argv)
 {
 	/*
@@ -360,13 +370,13 @@ int main(int argc, char const **argv)
 			*/
 
 	std::vector<Seqs> ref_seqs{};
-	parse_ref_seqs(ref_seqs, std::string(argv[1]));
+	//parse_ref_seqs(ref_seqs, std::filesystem::path(argv[1]));
 
-	typedef typename seqan::BDConfig< seqan::Dna5, seqan::Normal, seqan::Uncompressed > TConfig;
+	/*typedef typename seqan3::BDConfig< seqan::Dna5, seqan::Normal, seqan::Uncompressed > TConfig;
 	typedef typename TConfig::THash THash;
-	seqan::BDHash<seqan::Dna, THash> shape;
+	seqan3::BDHash<seqan::Dna, THash> shape;
 	shape.resize(15);
-
+*/
 	//std::vector<uint64_t> kmerHashes = shape.getHash(ref_seqs[0].seq);
 	//std::set<uint64_t> kmerHashSet(kmerHashes.begin(), kmerHashes.end());
 	//cout << "start hashing " << length(ref_seqs[0].seq) - 15 + 1 << " kmers" << endl;
@@ -376,9 +386,12 @@ int main(int argc, char const **argv)
 	}*/
 	//cout << "Unique kmers: " << kmerHashSet.size() << endl;
 
-	seqan::DnaString read = "AGAGTGAAGCCAATATTCCGATAACGATTGCTTTCATGATATCCCTCATTCTGGCATTATTTTTTTATACTATACTATTCGATATCGCACAGATCAATGGAGTCGTGAGAAAATAAACATGTTTTGCGAACCGCTATGTGTGGAAGACAAAAAATGGAGGTGAAATTGA";
-	std::vector<uint64_t> ReadHashes = shape.getHash(read);
-	std::set<uint64_t> kmerHashSet(ReadHashes.begin(), ReadHashes.end());
+	std::vector<seqan3::dna4> read{"AGAGTGAAGCCAATATTCCGATAACGATTGCTTTCATGATATCCCTCATTCTGGCATTATTTTTTTATACTATACTATTCGATATCGCACAGATCAATGGAGTCGTGAGAAAATAAACATGTTTTGCGAACCGCTATGTGTGGAAGACAAAAAATGGAGGTGAAATTGA"_dna4};
+	auto readHashes = seqan3::views::kmer_hash(read, seqan3::ungapped{15});
+	//seqan3::debug_stream << readHashes << std::endl;
+
+	//std::vector<uint64_t> ReadHashes = shape.getHash(read);
+	std::set<uint64_t> kmerHashSet(readHashes.begin(), readHashes.end());
 
 	xorfilter::XorFilter<uint64_t, uint16_t, SimpleMixSplit> xf(kmerHashSet.size());
 	xorfilter::Status s = xf.AddAll(std::vector(kmerHashSet.begin(), kmerHashSet.end()), 0, kmerHashSet.size());
@@ -386,13 +399,13 @@ int main(int argc, char const **argv)
 	//seqan::DnaString read = "AGAGTGAAGCCAATATTCCGATAACGATTGCTTTCATGATATCCCTCATTCTGGCATTATTTTTTTATACTATACTATTCGATATCGCACAGATCAATGGAGTCGTGAGAAAATAAACATGTTTTGCGAACCGCTATGTGTGGAAGACAAAAAATGGAGGTGAAATTGA";
 	//std::vector<uint64_t> ReadHashes = shape.getHash(read);
 	int found = 0;
-	for (auto hash : ReadHashes)
+	for (auto hash : readHashes)
 	{
 		if (xf.Contain(hash) == xorfilter::Status::Ok)
 			++found;
 	}
 	//s = xf.Contain((shape.getHash("CATCGCTAAGCTATC"))[0]);
-	cout << "Found kmers: " << found << " / " << ReadHashes.size() << endl;
+	cout << "Found kmers: " << found << " / " << readHashes.size() << endl;
 	
 		//}
 		
@@ -400,6 +413,8 @@ int main(int argc, char const **argv)
 		//break;
 		
 	//}
+
+
 
 	return 0;
 }

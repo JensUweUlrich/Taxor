@@ -31,5 +31,13 @@
 *.out
 *.app
 
+# project files
+.settings/
+.cproject
+.project
+src/.settings/
+src/.cproject
+src/.project
+
 # directories
 build/
