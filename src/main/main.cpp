@@ -11,6 +11,8 @@
 #include <seqan3/io/sequence_file/all.hpp>
 #include <seqan3/alphabet/nucleotide/all.hpp>
 #include <seqan3/search/views/kmer_hash.hpp>
+#include <seqan3/alphabet/views/to_char.hpp>
+#include <seqan3/alphabet/views/char_to.hpp>
 #include <seqan3/core/debug_stream.hpp>
 
 #include <zlib.h>
@@ -33,6 +35,11 @@ struct Seqs {
 	seqan3::dna4_vector seq;
 	
 };
+
+inline std::string get_seqid( std::string header )
+{
+    return header.substr( 0, header.find( ' ' ) );
+}
 
  void read_tsv(std::string fname, std::vector<std::vector<std::string> > &lines) {
 	std::ifstream ifs(fname);
@@ -258,65 +265,39 @@ struct Seqs {
 	   @stats:         statistics (like runtime for specific tasks) for building the ibf
 	   @throws:        FileParserException
    */
- /*
+
  void parse_ref_seqs(std::vector< Seqs >& queue_refs, const std::filesystem::path& reference_file)
  {
 	 //seqan::SeqFileIn seqFileIn;
-	 auto filename = std::filesystem::current_path() / "my.fasta";
-	 seqan3::sequence_file_input fin_from_filename{filename};
-	 // open input file in first iteration
-	 if (!seqan::open(seqFileIn, seqan::toCString(reference_file)))
-	 {
-		cerr << "Unable to open the file: " << reference_file << endl;
-	 }
-	 // read current input file
-	 while (!seqan::atEnd(seqFileIn))
-	 {
-		 seqan::StringSet< seqan::CharString > ids;
-		 seqan::StringSet< seqan::CharString > seqs;
-		 // read all sequences from the current file
-		 try
-		 {
-			 seqan::readRecords(ids, seqs, seqFileIn);
-		 }
-		 catch (seqan::Exception const& e)
-		 {
-			 cerr << "ERROR: Problems parsing the file: " << reference_file << "[" << e.what() << "]" << endl;
-		 }
+
+	 seqan3::sequence_file_input fin{reference_file};
 
 
-		 // iterate over all sequences loaded into the sequence bin
-				 
-		 for (uint64_t i = 0; i < seqan::length(ids); ++i)
+	 for ( auto& [seq, header, qual] : fin)
+	 {
+		 const std::string seqid = get_seqid( header );
+
+		 int counter = 1;
+		 auto charstring = seq | seqan3::views::to_char;
+		 std::string s = std::string(charstring.begin(), charstring.end());
+
+	 	 // remove all Ns from the sequence
+		 std::stringstream buf;
+		 for (std::string subseq : cutOutNNNs(s, s.size()))
 		 {
-			 // sequence with length < kmer size is invalid and will not be added to the queue
-			 if (seqan::length(seqs[i]) < 20)
-			 {
-				 continue;
-			 }
-			 std::string cid = seqan::toCString(ids[i]);
-			 // delete everything after first space in seq identifier
-			 std::string seqid = cid.substr(0, cid.find(' '));
-			 // add reference sequences to the queue
-			 int counter = 1;
-			 std::string seq = std::string(seqan::toCString(seqs[i]));
-			 // remove all Ns from the sequence
-			 std::stringstream buf;
-			 for (std::string seq : cutOutNNNs(seq, seqan::length(seqs[i])))
-			 {
-				 buf << seq;
-			 }
-			 std::string newseq = buf.str();
-			 queue_refs.emplace_back(Seqs{ seqid, ((seqan::DnaString)newseq) });
-			 // calculate bins needed for that sequence
+			 buf << subseq;
+		 }
+		 s =  buf.str();
+		 auto r = s | seqan3::views::char_to<seqan3::dna4>;
+		 seqan3::dna4_vector newseq(r.begin(), r.end());
+
+		 queue_refs.emplace_back(Seqs{ seqid, newseq });
 					
-		 }
 	 }
-	 seqan::close(seqFileIn);
 			 
  }
 
-*/
+
 int main(int argc, char const **argv)
 {
 	/*
@@ -370,7 +351,7 @@ int main(int argc, char const **argv)
 			*/
 
 	std::vector<Seqs> ref_seqs{};
-	//parse_ref_seqs(ref_seqs, std::filesystem::path(argv[1]));
+	parse_ref_seqs(ref_seqs, std::filesystem::path(argv[1]));
 
 	/*typedef typename seqan3::BDConfig< seqan::Dna5, seqan::Normal, seqan::Uncompressed > TConfig;
 	typedef typename TConfig::THash THash;
@@ -386,8 +367,8 @@ int main(int argc, char const **argv)
 	}*/
 	//cout << "Unique kmers: " << kmerHashSet.size() << endl;
 
-	std::vector<seqan3::dna4> read{"AGAGTGAAGCCAATATTCCGATAACGATTGCTTTCATGATATCCCTCATTCTGGCATTATTTTTTTATACTATACTATTCGATATCGCACAGATCAATGGAGTCGTGAGAAAATAAACATGTTTTGCGAACCGCTATGTGTGGAAGACAAAAAATGGAGGTGAAATTGA"_dna4};
-	auto readHashes = seqan3::views::kmer_hash(read, seqan3::ungapped{15});
+	//std::vector<seqan3::dna4> read{"AGAGTGAAGCCAATATTCCGATAACGATTGCTTTCATGATATCCCTCATTCTGGCATTATTTTTTTATACTATACTATTCGATATCGCACAGATCAATGGAGTCGTGAGAAAATAAACATGTTTTGCGAACCGCTATGTGTGGAAGACAAAAAATGGAGGTGAAATTGA"_dna4};
+	auto readHashes = seqan3::views::kmer_hash(ref_seqs[0].seq, seqan3::ungapped{15});
 	//seqan3::debug_stream << readHashes << std::endl;
 
 	//std::vector<uint64_t> ReadHashes = shape.getHash(read);
