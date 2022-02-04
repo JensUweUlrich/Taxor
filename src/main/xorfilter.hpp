@@ -150,7 +150,7 @@ Status XorFilter<ItemType, FingerprintType, HashFamily>::AddAll(
     hashIndex = 0;
     
     //cout << "Seed : " << hasher->seed << endl;
-    hasher->seed = 11766490319846427158;
+    hasher->seed = 13572355802537770549ULL;
     //t2val_t * t2vals = new t2val_t[m];
     // temporary array H
     std::vector<t2val_t> t2vals_vec(m);
@@ -193,7 +193,7 @@ Status XorFilter<ItemType, FingerprintType, HashFamily>::AddAll(
         delete[] tmpc;
         reverseOrderPos = 0;
 
-        // pick only index positions where only one unique has value points to => those are our start positions
+        // pick only index positions where only one unique hash value points to => those are our start positions
         int* alone = new int[arrayLength];
         int alonePos = 0;
         for (size_t i = 0; i < arrayLength; i++) 
@@ -202,7 +202,7 @@ Status XorFilter<ItemType, FingerprintType, HashFamily>::AddAll(
                 alone[alonePos++] = i;
             }
         }
-        cout << "AlonePos: " << alonePos << endl;
+
         tmp = new uint64_t[blocks << blockShift];
         tmpc = new int[blocks]();
         reverseOrderPos = 0;
@@ -223,6 +223,7 @@ Status XorFilter<ItemType, FingerprintType, HashFamily>::AddAll(
                     {
                         b = 0;
                     }
+                    std::cout << "tmpc[" << b <<"]: " << tmpc[b] << std::endl;
                     if (tmpc[b] > best) 
                     {
                         best = tmpc[b];
@@ -234,6 +235,8 @@ Status XorFilter<ItemType, FingerprintType, HashFamily>::AddAll(
                         }
                     }
                 }
+                std::cout << "Best Block: " << bestBlock << std::endl;
+                break;
                 if (tmpc[bestBlock] > 0) {
                     alonePos = applyBlock2(tmp, bestBlock, tmpc[bestBlock], t2vals, alone, alonePos);
                     tmpc[bestBlock] = 0;
@@ -283,7 +286,7 @@ Status XorFilter<ItemType, FingerprintType, HashFamily>::AddAll(
             reverseH[reverseOrderPos] = found;
             reverseOrderPos++;
             //if (reverseOrderPos % 100000 == 0)
-            cout << "reverseOrderPos: " << reverseOrderPos << "\tsize: " << size << endl;
+            //cout << "reverseOrderPos: " << reverseOrderPos << "\tsize: " << size << endl;
         }
         delete[] tmp;
         delete[] tmpc;
@@ -297,8 +300,8 @@ Status XorFilter<ItemType, FingerprintType, HashFamily>::AddAll(
         hashIndex++;
 
         // use a new random numbers
-        delete hasher;
-        hasher = new HashFamily();
+        // delete hasher;
+        //hasher = new HashFamily();
 
     }
 
