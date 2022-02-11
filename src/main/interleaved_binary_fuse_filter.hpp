@@ -13,17 +13,14 @@
 #include <seqan3/core/concept/cereal.hpp>
 #include <seqan3/core/detail/strong_type.hpp>
 
-namespace seqan3
+#include <bitset>
+
+//#define XXH_INLINE_ALL
+
+//#include "xxhash.h"
+
+namespace ulrich2
 {
-
-
-struct t2val {
-  uint64_t t2 = 0;
-  uint64_t t2count = 0;
-};
-
-typedef struct t2val t2val_t;
-const int blockShift = 18;
 
 /*!\brief The IXF binning directory. A data structure that efficiently answers set-membership queries for multiple bins.
  * \ingroup search_dream_index
@@ -84,7 +81,7 @@ template <typename FingerprintType = uint8_t>
 //!\cond
         requires std::same_as<FingerprintType,uint8_t> || std::same_as<FingerprintType,uint16_t>
 //!\endcond
-class interleaved_xor_filter
+class interleaved_binary_fuse_filter
 {
 private:
     
@@ -98,27 +95,24 @@ private:
     size_t bin_size_{};
     //!\brief number of elements that can be stored in each bin.
     size_t max_bin_elements{};
-    //!\brief The number of bits to shift the hash value before doing multiplicative hashing.
-    size_t hash_shift{};
+    
     //!\brief The number of 64-bit integers needed to store `bins` many bits (e.g. `bins = 50` -> `bin_words = 1`).
     size_t bin_words{};
     //!\brief The length of each xor_filter block (filter_size/3)
-    size_t block_length{};
+    size_t segment_length{};
+    size_t segment_length_mask{};
+    size_t segment_count_length{};
+    size_t segment_count{};
     //!\brief The int vector of fingerprints
     data_type data{};
     //!\brief number of bits used to store one hashed item in the XOR filter
     size_t ftype{};
     //!\brief seed for multiplicative hashing
-    size_t seed{};
-    
+    size_t seed{13572355802537770549ULL};
 
-    inline void set_seed()
-    {
-        ::std::random_device random;
-        seed = random();
-        seed <<= 32;
-        seed |= random();
-    }
+    size_t bins_per_batch{};
+
+    uint64_t seed_set{0};
 
     inline constexpr uint64_t murmur64(uint64_t h) const
     {
@@ -140,9 +134,9 @@ private:
         return (n << c) | ( n >> ((-c) & mask));
     }
 
-    inline constexpr FingerprintType fingerprint(const uint64_t hash) const 
+    inline FingerprintType fingerprint(const uint64_t hash) const 
     {
-        return (FingerprintType) hash ^ (hash >> 32);
+        return (FingerprintType)hash;
     }
 
     /*
@@ -157,16 +151,32 @@ private:
     }
 
 
-    inline constexpr size_t getHashFromHash(uint64_t hash, int index, int blockLength) const
+    inline __attribute__((always_inline)) size_t getHashFromHash(uint64_t hash, int index) 
     {
-        uint32_t r = rotl64(hash, index * 21);
-        return (size_t) reduce(r, blockLength) + ((size_t)index) * ((size_t)blockLength);
+        __uint128_t x = (__uint128_t)hash * (__uint128_t)segment_count_length;
+        uint64_t h = (uint64_t)(x >> 64);
+        h += index * segment_length;
+        // keep the lower 36 bits
+        uint64_t hh = hash & ((1UL << 36) - 1);
+        // index 0: right shift by 36; index 1: right shift by 18; index 2: no shift
+        h ^= (size_t)((hh >> (36 - 18 * index)) & segment_length_mask);
+        return h;
+    }
+
+
+    inline __attribute__((always_inline)) uint8_t mod3(uint8_t x) 
+    {
+        if (x > 2) 
+        {
+            x -= 3;
+        }
+        return x;
     }
 
     /*
     * count number of occurences of each index and XOR to the corresponding hash values of each index
     */
-    void applyBlock(uint64_t* tmp, int b, int len, t2val_t* t2vals)
+/*    void applyBlock(uint64_t* tmp, int b, int len, t2val_t* t2vals)
     {
         for (int i = 0; i < len; i += 2) {
             uint64_t x = tmp[(b << blockShift) + i];
@@ -180,7 +190,7 @@ private:
     *  remove all indexes in tmp array from index occurence array and remove corresponding hashes by XOR-ing with the hash value
     *  add index to single entry set if an index now occurs only once in the remaining set of indexes
     */
-    int applyBlock2(uint64_t* tmp, int b, int len, t2val_t*  t2vals, sdsl::int_vector<>& alone, int alonePos) 
+/*    int applyBlock2(uint64_t* tmp, int b, int len, t2val_t*  t2vals, sdsl::int_vector<>& alone, int alonePos) 
     {
         for (int i = 0; i < len; i += 2) {
             uint64_t hash = tmp[(b << blockShift) + i];
@@ -197,188 +207,146 @@ private:
         }
         return alonePos;
     }
-
-    int find_alone_positions(std::vector<size_t>& elements, std::vector<t2val_t>& t2vals, sdsl::int_vector<>& alone_positions)
+*/
+    int find_alone_positions(std::vector<size_t>& elements, 
+                             sdsl::int_vector<>& t2count, 
+                             sdsl::int_vector<>& t2hash,
+                             sdsl::int_vector<>& alone_positions,
+                             sdsl::int_vector<>& rev_order)
     {
-        std::fill(t2vals.begin(), t2vals.end(), t2val_t{ 0,0 });
-        // number of elements / 2^18 => if more than 2^18 elements, we need 2 blocks
-        int blocks = 1 + ((3 * block_length) >> blockShift);
-        //cout << "blocks : " << blocks << "\tblocklength: " << blockLength << "\tblockshift: " << blockShift <<  endl;
-        sdsl::int_vector<> tmp = sdsl::int_vector(blocks << blockShift, 0, 64);
-       
-        sdsl::int_vector<> tmpc = sdsl::int_vector(blocks,0);
-        
-        for(size_t k : elements) {
-            //uint64_t k = keys[i];
-            uint64_t hash = murmur64(k);
-            for (int hi = 0; hi < 3; hi++) {
-                int index = getHashFromHash(hash, hi, block_length);
-                int b = index >> blockShift;
-              //  std::cout << "hi: " << hi << "\t" << "key: " << k << "\t" << "index: " << index << "\t" << "b: " << b << std::endl;
-                int i2 = tmpc[b];
-                tmp[(b << blockShift) + i2] = hash;
-                tmp[(b << blockShift) + i2 + 1] = index;
-                tmpc[b] += 2;
-                //cout << "i2: " << i2 << "\t(b << blockShift) + i2: " << int((b << blockShift) + i2) << "\ttmpc[b]: " << tmpc[b] << endl;
-                if (i2 + 2 == (1 << blockShift)) {
-                    applyBlock(tmp.data(), b, i2 + 2, t2vals.data());
-                    tmpc[b] = 0;
-                }
-            }
+        rev_order[elements.size()] = 1;
+
+        int block_bits = 1;
+        while((size_t(1) << block_bits) < this->segment_count) 
+        { 
+            block_bits++; 
         }
-       
-        // count occurences of index positions for all computed hash values
-        for (int b = 0; b < blocks; b++) {
-            applyBlock(tmp.data(), b, tmpc[b], t2vals.data());
+        size_t block = size_t(1) << block_bits;
+        sdsl::int_vector<> start_pos = sdsl::int_vector(block,0,64);
+
+        for(uint32_t i = 0; i < uint32_t(1) << block_bits; i++) 
+        { 
+            start_pos[i] = i * this->max_bin_elements / block; 
         }
 
-        // pick only index positions where only one unique hash value points to => those are our start positions
-        //int* alone = new int[arrayLength];
-        int alonePos = 0;
-        for (size_t i = 0; i < bin_size_; i++) 
+        for (size_t k : elements) 
         {
-            if (t2vals[i].t2count == 1) {
-                alone_positions[alonePos++] = i;
+            uint64_t hash = murmur64(k);
+//            uint64_t hash = XXH3_64bits_withSeed((char*) &k, sizeof(k), seed);
+            size_t segment_index = hash >> (64 - block_bits);
+            // We only overwrite when the hash was zero. Zero hash values
+            // may be misplaced (unlikely).
+            while(rev_order[start_pos[segment_index]] != 0) 
+            {
+                segment_index++;
+                segment_index &= (size_t(1) << block_bits) - 1;
             }
+            rev_order[start_pos[segment_index]] = hash;
+            start_pos[segment_index] += 1;
+        }
+        uint8_t count_mask = 0;
+        for (size_t i = 0; i < elements.size(); i++) 
+        {
+            uint64_t hash = rev_order[i];
+            for (int hi = 0; hi < 3; hi++) 
+            {
+                int index = getHashFromHash(hash, hi);
+                t2count[index] += 4;
+                t2count[index] = t2count[index] ^ hi;
+                t2hash[index] = t2hash[index] ^ hash;
+                count_mask |= t2count[index];
+            }
+        }
+        
+        if (count_mask >= 0x80) 
+        {
+            // we have a possible counter overflow
+            // this branch is never taken except if there is a problem in the hash code
+            // in which case construction fails
+            return 0;
+        }
+
+        size_t alonePos = 0;
+        for (size_t i = 0; i < this->bin_size_; i++) 
+        {
+            alone_positions[alonePos] = i;
+            int inc = (t2count[i] >> 2) == 1 ? 1 : 0;
+            alonePos += inc;
         }
         return alonePos;
     }
 
     size_t fill_stack(sdsl::int_vector<>& reverse_order, 
                       sdsl::int_vector<>& reverse_h, 
-                      std::vector<t2val_t>& t2vals, 
+                      sdsl::int_vector<>& t2count, 
+                      sdsl::int_vector<>& t2hash, 
                       sdsl::int_vector<>& alone_positions,
-                      size_t size, 
                       int alone_pos)
     {
-        int blocks = 1 + ((3 * block_length) >> blockShift);
-        sdsl::int_vector<> tmp = sdsl::int_vector(blocks << blockShift, 0, 64);
-        sdsl::int_vector<> tmpc = sdsl::int_vector(blocks, 0);
         size_t reverse_order_pos = 0;
-        int best_block = 0;
-       
-        while (reverse_order_pos < size)
+        size_t h012[5];
+        while (alone_pos > 0) 
         {
-            if (alone_pos == 0) 
+            alone_pos--;
+            size_t index = alone_positions[alone_pos];
+            if ((t2count[index] >> 2) == 1) 
             {
-                // we need to apply blocks until we have an entry that is alone
-                // (that is, until alonePos > 0)
-                // so, find a large block (the larger the better)
-                // but don't need to search very long
-                // start searching where we stopped the last time
-                // (to make it more even)
-                
-                for (int i = 0, b = best_block, best = -1; i < blocks; i++)
-                {
-                    if (b >= blocks)
-                    {
-                        b = 0;
-                    }
-                    if (tmpc[b] > best) 
-                    {
-                        best = tmpc[b];
-                        best_block = b;
-                        if (best > (1 << (blockShift - 1))) 
-                        {
-                            // sufficiently large: stop
-                            break;
-                        }
-                    }
-                }
-                
-                if (tmpc[best_block] > 0) {
-                    alone_pos = applyBlock2(tmp.data(), best_block, tmpc[best_block], t2vals.data(), alone_positions, alone_pos);
-                    tmpc[best_block] = 0;
-                }
-                // applying a block may not actually result in a new entry that is alone
-                if (alone_pos == 0) {
-                    for (int b = 0; b < blocks && alone_pos == 0; b++) {
-                        if (tmpc[b] > 0) {
-                            alone_pos = applyBlock2(tmp.data(), b, tmpc[b], t2vals.data(), alone_positions, alone_pos);
-                            tmpc[b] = 0;
-                        }
-                    }
-                }
+
+                // It is still there!
+                uint64_t hash = t2hash[index];
+                int found = t2count[index] & 3;
+        
+                reverse_h[reverse_order_pos] = found;
+                reverse_order[reverse_order_pos] = hash;
+        
+                h012[0] = getHashFromHash(hash, 0);
+                h012[1] = getHashFromHash(hash, 1);
+                h012[2] = getHashFromHash(hash, 2);
+
+                size_t index3 = h012[mod3(found + 1)];
+                alone_positions[alone_pos] = index3;
+                alone_pos += ((t2count[index3] >> 2) == 2 ? 1 : 0);
+                t2count[index3] -= 4;
+                t2count[index3] = t2count[index3] ^ mod3(found + 1);
+                t2hash[index3] = t2hash[index3] ^ hash;
+
+                index3 = h012[mod3(found + 2)];
+                alone_positions[alone_pos] = index3;
+                alone_pos += ((t2count[index3] >> 2) == 2 ? 1 : 0);
+                t2count[index3] -= 4;
+                t2count[index3] = t2count[index3] ^ mod3(found + 2);
+                t2hash[index3] = t2hash[index3] ^ hash;
+
+                reverse_order_pos++;
             }
-            if (alone_pos == 0) {
-                break;
-            }
-            
-            int i = alone_positions[--alone_pos];
-            int b = i >> blockShift;
-            if (tmpc[b] > 0) {
-                alone_pos = applyBlock2(tmp.data(), b, tmpc[b], t2vals.data(), alone_positions, alone_pos);
-                tmpc[b] = 0;
-            }
-            
-            uint8_t found = -1;
-            if (t2vals[i].t2count == 0) {
-                continue;
-            }
-            long hash = t2vals[i].t2;
-            
-            for (int hi = 0; hi < 3; hi++) {
-                int h = getHashFromHash(hash, hi, block_length);
-                if (h == i) {
-                    found = (uint8_t) hi;
-                    t2vals[i].t2count = 0;
-                } else {
-                    int b = h >> blockShift;
-                    int i2 = tmpc[b];
-                    tmp[(b << blockShift) + i2] = hash;
-                    tmp[(b << blockShift) + i2 + 1] = h;
-                    tmpc[b] +=  2;
-                    if (tmpc[b] >= 1 << blockShift) {
-                        alone_pos = applyBlock2(tmp.data(), b, tmpc[b], t2vals.data(), alone_positions, alone_pos);
-                        tmpc[b] = 0;
-                    }
-                }
-            }
-            
-            reverse_order[reverse_order_pos] = hash;
-            reverse_h[reverse_order_pos] = found;
-            reverse_order_pos++;
         }
         return reverse_order_pos;
     }
 
     void fill_filter(sdsl::int_vector<>& reverse_order, sdsl::int_vector<>& reverse_h, uint bin)
     {
+        // the array h0, h1, h2, h0, h1, h2
+        size_t h012[5];
         
         for (int i = reverse_order.size() - 1; i >= 0; i--) 
         {
             // the hash of the key we insert next
             uint64_t hash = reverse_order[i];
             int found = reverse_h[i];
-            // which entry in the table we can change
-            int change = -1;
-            // we set table[change] to the fingerprint of the key,
-            // unless the other two entries are already occupied
-            FingerprintType xor2 = fingerprint(hash);
-            for (int hi = 0; hi < 3; hi++) 
-            {
-                size_t h = getHashFromHash(hash, hi, block_length);
-                if (found == hi) 
-                {
-                    change = h;
-                } 
-                else 
-                {
-                    uint64_t idx = bins * h;
-                    idx += bin;
-                    xor2 ^= data[idx];
 
-                }
-            }
-            uint64_t idx = bins * change;
-            idx += bin;
-           
-            data[idx] = xor2;
+            FingerprintType xor2 = fingerprint(hash);
+            h012[0] = (this->bins * getHashFromHash(hash, 0)) + bin;
+            h012[1] = (this->bins * getHashFromHash(hash, 1)) + bin;
+            h012[2] = (this->bins * getHashFromHash(hash, 2)) + bin;
+            h012[3] = h012[0];
+            h012[4] = h012[1];
+            data[h012[found]] = xor2 ^ data[h012[found + 1]] ^ data[h012[found + 2]];
+            
         }
     }
     
 
-    void add_elements(std::vector<std::vector<size_t>> elements)
+    void add_elements(std::vector<std::vector<size_t>>& elements)
     {
         // stack sigma
         // order in which elements will be inserted into their corresponding bins
@@ -388,43 +356,57 @@ private:
         size_t reverse_order_pos;
         //hashIndex = 0;
         // repeat until all xor filters can be build with same seed
+
         while (true)
         {
             // sets the same seed for all xor filters
-            set_seed();
             int i = 0;
             bool success = true;
             reverse_hs.clear();
             reverse_order_pos = 0;
             reverse_orders.clear();
+
             for (std::vector<size_t> vec : elements)
             {
-                std::vector<t2val_t> t2vals_vec(bin_size_);
+                sdsl::int_vector<> t2count = sdsl::int_vector(this->bin_size_,0,8);
+                sdsl::int_vector<> t2hash = sdsl::int_vector(this->bin_size_,0,64);
                 sdsl::int_vector<> alone_positions = sdsl::int_vector(bin_size_);
-                int alone_position_nr = find_alone_positions(vec, t2vals_vec, alone_positions);
-               
                 sdsl::int_vector<> rev_order_i = sdsl::int_vector(vec.size(),0,64);
                 sdsl::int_vector<> reverse_hi = sdsl::int_vector(vec.size(),0,8);
-                reverse_order_pos = fill_stack(std::ref(rev_order_i), std::ref(reverse_hi), t2vals_vec, alone_positions, vec.size(), alone_position_nr);
+                int alone_position_nr = find_alone_positions(vec, t2count, t2hash, alone_positions, rev_order_i);
+                
+//                std::cout << alone_position_nr << std::endl;
+
+                
+                reverse_order_pos = fill_stack(std::ref(rev_order_i), std::ref(reverse_hi), t2count, t2hash, alone_positions, alone_position_nr);
                 reverse_orders.emplace_back(std::move(rev_order_i));
                 reverse_hs.emplace_back(std::move(reverse_hi));
                 if (reverse_order_pos != vec.size())
                 {
                     success = false;
+                    set_seed();
+                    t2count.clear();
+                    t2hash.clear();
+                    alone_positions.clear();
+                    rev_order_i.clear();
+                    reverse_hi.clear();
                     break;
                 }
 
                 i++;
             }
+           
             if (success)
                 break;
+
         }
-        
+
         for (size_t i = 0; i < elements.size(); ++i)
         {
             fill_filter(reverse_orders[i], reverse_hs[i], i);
         }
         
+//        std::cout << "Changed Seed " << seed_set << " times!" << std::endl;
     }
 
 public:
@@ -436,12 +418,12 @@ public:
     /*!\name Constructors, destructor and assignment
      * \{
      */
-    interleaved_xor_filter() = default; //!< Defaulted.
-    interleaved_xor_filter(interleaved_xor_filter const &) = default; //!< Defaulted.
-    interleaved_xor_filter & operator=(interleaved_xor_filter const &) = default; //!< Defaulted.
-    interleaved_xor_filter(interleaved_xor_filter &&) = default; //!< Defaulted.
-    interleaved_xor_filter & operator=(interleaved_xor_filter &&) = default; //!< Defaulted.
-    ~interleaved_xor_filter() = default; //!< Defaulted.
+    interleaved_binary_fuse_filter() = default; //!< Defaulted.
+    interleaved_binary_fuse_filter(interleaved_binary_fuse_filter const &) = default; //!< Defaulted.
+    interleaved_binary_fuse_filter & operator=(interleaved_binary_fuse_filter const &) = default; //!< Defaulted.
+    interleaved_binary_fuse_filter(interleaved_binary_fuse_filter &&) = default; //!< Defaulted.
+    interleaved_binary_fuse_filter & operator=(interleaved_binary_fuse_filter &&) = default; //!< Defaulted.
+    ~interleaved_binary_fuse_filter() = default; //!< Defaulted.
 
     /*!\brief Construct an uncompressed Interleaved XOR Filter.
      * \param bins_ The number of bins.
@@ -455,7 +437,7 @@ public:
      *
      * \include test/snippet/search/dream_index/interleaved_xor_filter_constructor.cpp
      */
-    interleaved_xor_filter(std::vector<std::vector<size_t>> elements)
+    interleaved_binary_fuse_filter(std::vector<std::vector<size_t>>& elements)
     {
         bins = elements.size();
         for (std::vector<size_t> v : elements)
@@ -463,11 +445,66 @@ public:
             if (v.size() > max_bin_elements)
                 max_bin_elements = v.size();
         }
+        
+        this->segment_length = 1L << (int)floor(log(max_bin_elements) / log(3.33) + 2.25);;
+        // the current implementation hardcodes a 18-bit limit to
+        // to the segment length.
+        if (this->segment_length > (1 << 18)) {
+            this->segment_length = (1 << 18);
+        }
+        double size_factor = fmax(1.125, 0.875 + 0.25 * log(1000000) / log(max_bin_elements));
+        size_t capacity = max_bin_elements * size_factor;
+        size_t segment_count_ = (capacity + segment_length - 1) / segment_length - 2;
+        this->bin_size_ = (segment_count_ + 2) * segment_length;
+        this->segment_length_mask = this->segment_length - 1;
+        this->segment_count = (this->bin_size_ + this->segment_length - 1) / this->segment_length;
+        this->segment_count = this->segment_count <= 2 ? 1 : this->segment_count - 2;
+        this->bin_size_ = (this->segment_count + 2) * this->segment_length;
+        this->segment_count_length = this->segment_count * this->segment_length;
+        //fingerprints = new FingerprintType[arrayLength]();
+
+        //std::fill_n(fingerprints, arrayLength, 0);
+        
+        
+        ftype = CHAR_BIT * sizeof(FingerprintType);
+        std::cout << bin_size_ << "\t" << ftype << std::endl;
+        bins_per_batch = 64/ftype;
+
+        if (bins == 0)
+            throw std::logic_error{"The number of bins must be > 0."};
+        if (bin_size_ == 0)
+            throw std::logic_error{"The size of a bin must be > 0."};
+
+
+        if (ftype == 8)
+        {
+            bin_words = (bins + 7) >> 3; // = ceil(bins/8)
+            technical_bins  = bin_words << 3; // = bin_words * 8
+        }
+        else
+        {
+            bin_words = (bins + 15) >> 4; // = ceil(bins/8)
+            technical_bins  = bin_words << 4; // = bin_words * 16
+        }
+
+        data = sdsl::int_vector<>(bin_size_ * bins, 0, ftype);
+        //data = sdsl::int_vector<>(bins * bin_size_, 0, ftype);
+    
+        add_elements(elements);
+
+        
+    }
+
+/*
+    interleaved_xor_filter(size_t bins_, size_t max_bin_elements)
+    {
+        this->bins = bins_;
         std::cout << "Max Elements: " << max_bin_elements << std::endl;
         bin_size_ = 32 + 1.23 * max_bin_elements;
         block_length = bin_size_ / 3;
         ftype = CHAR_BIT * sizeof(FingerprintType);
         std::cout << bin_size_ << "\t" << ftype << std::endl;
+        bins_per_batch = 64/ftype;
 
         if (bins == 0)
             throw std::logic_error{"The number of bins must be > 0."};
@@ -475,38 +512,57 @@ public:
             throw std::logic_error{"The size of a bin must be > 0."};
 
         hash_shift = std::countl_zero(bin_size_);
-        bin_words = (bins + 63) >> 6; // = ceil(bins/64)
-        technical_bins  = bin_words << 6; // = bin_words * 64
+
+        if (ftype == 8)
+        {
+            bin_words = (bins + 7) >> 3; // = ceil(bins/8)
+            technical_bins  = bin_words << 3; // = bin_words * 8
+        }
+        else
+        {
+            bin_words = (bins + 15) >> 4; // = ceil(bins/8)
+            technical_bins  = bin_words << 4; // = bin_words * 16
+        }
         data = sdsl::int_vector<>(bins * bin_size_, 0, ftype);
-    
-        add_elements(elements);
-
-        
     }
 
-    /*!\brief Construct a compressed Interleaved XOR Filter.
-     * \param[in] ixf The uncompressed seqan3::interleaved_xor_filter.
-     *
-     * \attention This constructor can only be used to construct **compressed** Interleaved XOR Filters.
-     *
-     * \details
-     *
-     * ### Example
-     *
-     * \include test/snippet/search/dream_index/interleaved_bloom_filter_constructor_compressed.cpp
-     */
-/*    interleaved_xor_filter(interleaved_xor_filter<FingerprintType,data_layout::uncompressed> const & ixf)
-    //!\cond
-        requires (data_layout_mode == data_layout::compressed)
-    //!\endcond
+
+    bool add_bin_elements(size_t bin, std::vector<size_t>& elements)
     {
-        std::tie(bins, technical_bins, bin_size_, hash_shift, bin_words) =
-            std::tie(ixf.bins, ixf.technical_bins, ixf.bin_size_, ixf.hash_shift, ixf.bin_words, ixf.hash_funs);
+       
+        size_t reverse_order_pos = 0;
+        std::vector<t2val_t> t2vals_vec(bin_size_);
+        sdsl::int_vector<> alone_positions = sdsl::int_vector(bin_size_);
+        int alone_position_nr = find_alone_positions(elements, t2vals_vec, alone_positions);
+        sdsl::int_vector<> rev_order = sdsl::int_vector(elements.size(),0,64);
+        sdsl::int_vector<> reverse_h = sdsl::int_vector(elements.size(),0,8);
+        reverse_order_pos = fill_stack(std::ref(rev_order), std::ref(reverse_h), t2vals_vec, alone_positions, elements.size(), alone_position_nr);
+        if (reverse_order_pos != elements.size())
+        {
+            return false;
+        }
 
-        data = sdsl::sd_vector<>{ixf.data};
+        fill_filter(rev_order, reverse_h, bin);
+
+        return true;
     }
-  */  
-   
+*/   
+    void clear()
+    {
+        for (size_t idx = 0; idx < data.size(); ++idx)
+            data[idx] = 0;
+    }
+
+
+    void set_seed()
+    {
+        ::std::random_device random;
+        seed = random();
+        seed <<= 32;
+        seed |= random();
+        seed_set++;
+        std::cout << "Seed change number: " << seed_set << std::endl;
+    }
 
     /*!\name Lookup
      * \{
@@ -523,7 +579,7 @@ public:
      */
     membership_agent membership_agent() const
     {
-        return typename interleaved_xor_filter<FingerprintType>::membership_agent{*this};
+        return typename interleaved_binary_fuse_filter<FingerprintType>::membership_agent{*this};
     }
 
     /*!\brief Returns a seqan3::interleaved_xor_filter::counting_agent_type to be used for counting.
@@ -576,12 +632,13 @@ public:
      * \param[in] rhs `seqan3::interleaved_xor_filter` to compare to.
      * \returns `true` if equal, `false` otherwise.
      */
-    friend bool operator==(interleaved_xor_filter const & lhs, interleaved_xor_filter const & rhs) noexcept
+    
+    friend bool operator==(interleaved_binary_fuse_filter const & lhs, interleaved_binary_fuse_filter const & rhs) noexcept
     {
-        return std::tie(lhs.bins, lhs.technical_bins, lhs.bin_size_, lhs.hash_shift, lhs.bin_words, lhs.hash_funs,
-                        lhs.data) ==
-               std::tie(rhs.bins, rhs.technical_bins, rhs.bin_size_, rhs.hash_shift, rhs.bin_words, rhs.hash_funs,
-                        rhs.data);
+        return std::tie(lhs.bins, lhs.bins_per_batch, lhs.bin_size_, lhs.ftype, lhs.bin_words, lhs.segment_count_length,
+                        lhs.segment_length, lhs.segment_length_mask, lhs.seed, lhs.data) ==
+               std::tie(rhs.bins, rhs.bins_per_batch, rhs.bin_size_, rhs.ftype, rhs.bin_words, rhs.segment_count_length,
+                        rhs.segment_length, rhs.segment_length_mask, rhs.seed, rhs.data);
     }
 
     /*!\brief Test for inequality.
@@ -589,7 +646,7 @@ public:
      * \param[in] rhs `seqan3::interleaved_xor_filter` to compare to.
      * \returns `true` if unequal, `false` otherwise.
      */
-    friend bool operator!=(interleaved_xor_filter const & lhs, interleaved_xor_filter const & rhs) noexcept
+    friend bool operator!=(interleaved_binary_fuse_filter const & lhs, interleaved_binary_fuse_filter const & rhs) noexcept
     {
         return !(lhs == rhs);
     }
@@ -624,22 +681,23 @@ public:
      *
      * \attention These functions are never called directly, see \ref serialisation for more details.
      */
-    template <cereal_archive archive_t>
+    template <seqan3::cereal_archive archive_t>
     void CEREAL_SERIALIZE_FUNCTION_NAME(archive_t & archive)
     {
         archive(bins);
-        archive(technical_bins);
         archive(bin_size_);
-        archive(hash_shift);
         archive(bin_words);
         archive(ftype);
-        if (ftype != (CHAR_BIT * sizeof(FingerprintType))
+        if (ftype != (CHAR_BIT * sizeof(FingerprintType)))
         {
             throw std::logic_error{"The interleaved XOR filter was built with a fingerprint size of " + std::to_string(ftype) +
                                    " but it is being read into an interleaved XOR filter with fingerprint of size " +
                                    std::to_string(CHAR_BIT * sizeof(FingerprintType)) + "."};
         }
-        archive(block_length);
+        archive( bins_per_batch);
+        archive(segment_count_length);
+        archive(segment_length);
+        archive(segment_length_mask); 
         archive(seed);
         archive(data);
     }
@@ -655,14 +713,14 @@ public:
  * \include test/snippet/search/dream_index/membership_agent_construction.cpp
  */
 template <typename FingerprintType>
-class interleaved_xor_filter<FingerprintType>::membership_agent
+class interleaved_binary_fuse_filter<FingerprintType>::membership_agent
 {
 private:
     //!\brief The type of the augmented seqan3::interleaved_xor_filter.
-    using ixf_t = interleaved_xor_filter<FingerprintType>;
+    using iff_t = interleaved_binary_fuse_filter<FingerprintType>;
 
     //!\brief A pointer to the augmented seqan3::interleaved_xor_filter.
-    ixf_t const * ixf_ptr{nullptr};
+    iff_t const * iff_ptr{nullptr};
 
 public:
     class binning_bitvector;
@@ -681,8 +739,8 @@ public:
      * \private
      * \param ibf The seqan3::interleaved_xor_filter.
      */
-    explicit membership_agent(ixf_t const & ixf) :
-        ixf_ptr(std::addressof(ixf)), result_buffer(ixf.bin_count())
+    explicit membership_agent(iff_t const & iff) :
+        iff_ptr(std::addressof(iff)), result_buffer(iff.bin_count())
     {}
     //!\}
 
@@ -709,38 +767,72 @@ public:
      * Concurrent invocations of this function are not thread safe, please create a
      * seqan3::interleaved_xor_filter::membership_agent for each thread.
      */
-    [[nodiscard]] binning_bitvector const & bulk_contains(size_t const value) & noexcept
+
+     [[nodiscard]] binning_bitvector const & bulk_contains(size_t const value) & noexcept
     {
-        assert(ixf_ptr != nullptr);
-        assert(result_buffer.size() == ixf_ptr->bin_count());
+        //std::cout << "Start bulk contains " << std::endl;
+        assert(iff_ptr != nullptr);
+        assert(result_buffer.size() == iff_ptr->bin_count());
 
-        uint64_t hash = ixf_ptr->murmur64(value);
-        FingerprintType f = ixf_ptr->fingerprint(hash);
-//        std::cout << "Fingerprint for " << value << " : " << f << std::endl;
-        uint32_t r0 = (uint32_t) hash;
-        uint32_t r1 = (uint32_t) ixf_ptr->rotl64(hash, 21);
-        uint32_t r2 = (uint32_t) ixf_ptr->rotl64(hash, 42);
-        uint32_t h0 = ixf_ptr->reduce(r0, ixf_ptr->block_length);
-        uint32_t h1 = ixf_ptr->reduce(r1, ixf_ptr->block_length) + ixf_ptr->block_length;
-        uint32_t h2 = ixf_ptr->reduce(r2, ixf_ptr->block_length) + 2 * ixf_ptr->block_length;
-        size_t bins = ixf_ptr->bin_count();
+        size_t bins = iff_ptr->bin_count();
 
-        assert(h0 * (bins+1) - 1 < ixf_ptr->data.size());
-        assert(h1 * (bins+1) - 1 < ixf_ptr->data.size());
-        assert(h2 * (bins+1) - 1 < ixf_ptr->data.size());
+        uint8_t ftype = iff_ptr->ftype;
+        uint8_t bins_per_batch = iff_ptr->bins_per_batch;
+        size_t segment_count_length = iff_ptr->segment_count_length;
+        size_t segment_length = iff_ptr->segment_length;
+        size_t segment_length_mask = iff_ptr->segment_length_mask;
 
-        for (size_t bin = 0; bin < bins; ++bin)
+        uint64_t hash = iff_ptr->murmur64(value);
+//        uint64_t hash = XXH3_64bits_withSeed((char*) &value, sizeof(value), iff_ptr->seed);
+        FingerprintType f = iff_ptr->fingerprint(hash);
+        //std::cout << "Fingerprint for " << value << " : " << f << std::endl;
+        __uint128_t x = (__uint128_t)hash * (__uint128_t) segment_count_length;
+        uint32_t h0 = (uint64_t)(x >> 64);
+        uint32_t h1 = h0 + segment_length;
+        uint32_t h2 = h1 + segment_length;
+        uint64_t hh = hash;
+        h1 ^= (size_t)((hh >> 18) & segment_length_mask);
+        h2 ^= (size_t)((hh) & segment_length_mask);
+
+        h0 = h0*bins*ftype;
+        h1 = h1*bins*ftype;
+        h2 = h2*bins*ftype;
+
+        // for bins/(64/ftype) : 
+
+        // concatenate (64/ftype) the fingerprint
+        
+        uint64_t fc64 = f;
+        for (uint8_t b = 1; b < bins_per_batch ; ++b)
         {
-            // TODO: make xor of whole subvectors if performance is low
-            FingerprintType v = f ^ ixf_ptr->data[h0*bins + bin] 
-                                  ^ ixf_ptr->data[h1*bins + bin] 
-                                  ^ ixf_ptr->data[h2*bins + bin];
-            
-/*            std::cout << h0*bins + bin << "\t" << ixf_ptr->data[h0*bins + bin] << std::endl;
-            std::cout << h1*bins + bin << "\t" << ixf_ptr->data[h1*bins + bin] << std::endl;
-            std::cout << h2*bins + bin << "\t" << ixf_ptr->data[h2*bins + bin] << std::endl;
-*/
-            result_buffer.data.set_int(bin, v == 0 ? 1 : 0);
+            fc64 = (fc64 << ftype) | f;
+        }
+        //std::cout << std::bitset<64>(fc64) << std::endl;
+
+
+        for (size_t batch = 0; batch < iff_ptr->bin_words; ++batch)
+        {
+            size_t batch_start = batch * 64;
+            uint64_t v = fc64 ^ iff_ptr->data.get_int(h0 + batch_start, 64) 
+                              ^ iff_ptr->data.get_int(h1 + batch_start, 64) 
+                              ^ iff_ptr->data.get_int(h2 + batch_start, 64);
+//            std::cout << std::bitset<64>(v) << std::endl;
+            size_t used_bins = batch * bins_per_batch;
+            uint8_t bits = 0;
+            for (size_t bin = 0; bin < bins_per_batch; ++bin)
+            {
+                if (used_bins + bin == result_buffer.size())
+                    break;
+
+                uint64_t tmp = v << ((bins_per_batch - (bin+1)) * ftype ); //v << (bin*ftype);
+                //uint8_t bits = (uint8_t) (tmp >> (64-ftype));
+                uint8_t tmpb = std::bitset<8>(tmp >> (64-ftype)).none() << bin;
+                bits |= tmpb;
+                //std::cout << std::bitset<8>(bits) << std::endl;
+                   
+            }
+            //std::cout << std::bitset<8>(bits) << std::endl;
+            result_buffer.data.set_int(used_bins, bits, ftype);
         }
 
         return result_buffer;
@@ -748,14 +840,13 @@ public:
 
     // `bulk_contains` cannot be called on a temporary, since the object the returned reference points to
     // is immediately destroyed.
-    [[nodiscard]] binning_bitvector const & bulk_contains(size_t const value) && noexcept = delete;
     //!\}
-
+     [[nodiscard]] binning_bitvector const & bulk_contains(size_t const value) && noexcept = delete;
 };
 
 //!\brief A bitvector representing the result of a call to `bulk_contains` of the seqan3::interleaved_bloom_filter.
 template <typename FingerprintType>
-class interleaved_xor_filter<FingerprintType>::membership_agent::binning_bitvector
+class interleaved_binary_fuse_filter<FingerprintType>::membership_agent::binning_bitvector
 {
 private:
     //!\brief The underlying datatype to use.
@@ -995,17 +1086,17 @@ public:
  */
 template <typename FingerprintType>
 template <std::integral value_t>
-class interleaved_xor_filter<FingerprintType>::counting_agent_type
+class interleaved_binary_fuse_filter<FingerprintType>::counting_agent_type
 {
 private:
     //!\brief The type of the augmented seqan3::interleaved_xor_filter.
-    using ixf_t = interleaved_xor_filter<FingerprintType>;
+    using iff_t = interleaved_binary_fuse_filter<FingerprintType>;
 
     //!\brief A pointer to the augmented seqan3::interleaved_xor_filter.
-    ixf_t const * ixf_ptr{nullptr};
+    iff_t const * iff_ptr{nullptr};
 
     //!\brief Store a seqan3::interleaved_xor_filter::membership_agent to call `bulk_contains`.
-    typename ixf_t::membership_agent membership_agent;
+    typename iff_t::membership_agent membership_agent;
 
 public:
     /*!\name Constructors, destructor and assignment
@@ -1022,8 +1113,8 @@ public:
      * \private
      * \param ibf The seqan3::interleaved_bloom_filter.
      */
-    explicit counting_agent_type(ixf_t const & ixf) :
-        ixf_ptr(std::addressof(ixf)), membership_agent(ixf), result_buffer(ixf.bin_count())
+    explicit counting_agent_type(iff_t const & iff) :
+        iff_ptr(std::addressof(iff)), membership_agent(iff), result_buffer(iff.bin_count())
     {}
     //!\}
 
@@ -1055,8 +1146,8 @@ public:
     template <std::ranges::range value_range_t>
     [[nodiscard]] counting_vector<value_t> const & bulk_count(value_range_t && values) & noexcept
     {
-        assert(ixf_ptr != nullptr);
-        assert(result_buffer.size() == ixf_ptr->bin_count());
+        assert(iff_ptr != nullptr);
+        assert(result_buffer.size() == iff_ptr->bin_count());
 
         static_assert(std::ranges::input_range<value_range_t>, "The values must model input_range.");
         static_assert(std::unsigned_integral<std::ranges::range_value_t<value_range_t>>,

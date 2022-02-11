@@ -14,14 +14,14 @@
 #include <seqan3/alphabet/views/to_char.hpp>
 #include <seqan3/alphabet/views/char_to.hpp>
 #include <seqan3/core/debug_stream.hpp>
-//#include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
+#include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
+#include <seqan3/search/dream_index/interleaved_xor_filter.hpp>
 
 #include <cereal/archives/binary.hpp>
 
 #include <zlib.h>
-#include "xorfilter.hpp"
 #include "StopClock.hpp"
-#include "interleaved_xor_filter.hpp"
+#include "interleaved_binary_fuse_filter.hpp"
 
 using namespace seqan3::literals;
 
@@ -307,6 +307,239 @@ inline uint64_t get_bin_size( double false_positive, uint16_t hash_functions, ui
 			 
  }
 
+void construct_and_query_ixf(size_t bins, size_t elements_per_bin)
+{
+	StopClock ixf_construct{};
+	ixf_construct.start();
+	//ulrich::interleaved_xor_filter<> ixf(elems);
+	seqan3::interleaved_xor_filter<> ixf(bins, elements_per_bin);
+	std::vector<uint64_t> elems{};
+	while (true)
+	{
+		bool success = true;
+		for (int e = 0; e < bins ; ++e)
+		{
+			std::vector<uint64_t> tmp{};
+			for (uint64_t i = 0; i < elements_per_bin; ++i)
+			{
+				uint64_t key = (e*elements_per_bin) + i;
+				tmp.emplace_back(key);
+			}
+			success = ixf.add_bin_elements(e, tmp);
+			if (!success)
+			{
+				ixf.clear();
+				ixf.set_seed();
+				break;
+			}
+			if (e == 2)
+				elems=std::move(tmp);
+		}
+
+		if (success)
+			break;
+	}
+	ixf_construct.stop();
+	std::cout << "Built IXF in " << ixf_construct.elapsed() << " seconds" << std::endl;
+
+	StopClock ixf_query{};
+	ixf_query.start();
+	typedef seqan3::interleaved_xor_filter<>::counting_agent_type< uint64_t > TIXFAgent;
+/*
+	auto agent = ixf.membership_agent();
+    auto & result = agent.bulk_contains(5768566);
+*/    //seqan3::debug_stream << result << '\n';
+	TIXFAgent ixf_count_agent = ixf.counting_agent< uint64_t >();
+	//auto result = count_agent.bulk_count(readHs);
+	auto ixf_result = ixf_count_agent.bulk_count(elems);
+	ixf_query.stop();
+//	seqan3::debug_stream << ixf_result << "\n";
+	double fpr {0.0};
+	for (int i =0; i < ixf_result.size(); ++i)
+	{
+		if (i == 2)
+			continue;
+		fpr += (double) ixf_result[i] / (double) elements_per_bin;
+	}
+	fpr /= (double) (bins - 1);
+	std::cout << "FPR of the IXF: " << fpr << std::endl;
+	double mbytes = (double) ixf.bit_size() / (double) 8388608;
+	std::cout << "Size of the IXF: " << mbytes << " MBytes" << std::endl;
+	std::cout << "Queried " << elems.size() <<" keys in IXF in " << ixf_query.elapsed() << " seconds" << std::endl;
+
+	StopClock ixf_store{};
+	ixf_store.start();
+	std::string filter_file = "test.ixf";
+	
+	std::ofstream               os( filter_file, std::ios::binary );
+    cereal::BinaryOutputArchive archive( os );
+    archive( ixf );  
+	ixf_store.stop();
+	std::cout << "Stored IXF in " << ixf_store.elapsed() << " seconds" << std::endl;
+
+}
+
+void construct_and_query_iff(size_t bins, size_t elements_per_bin)
+{
+	
+	//ulrich::interleaved_xor_filter<> ixf(elems);
+//	ulrich::interleaved_xor_filter<> ixf(bins, elements_per_bin);
+	std::vector<std::vector<uint64_t>> elems{};
+	
+	for (int e = 0; e < bins ; ++e)
+	{
+		std::vector<uint64_t> tmp{};
+		for (uint64_t i = 0; i < elements_per_bin; ++i)
+		{
+			uint64_t key = (e*elements_per_bin) + i;
+			tmp.emplace_back(key);
+		}
+		elems.emplace_back(std::move(tmp));
+	}
+	StopClock iff_construct{};
+	iff_construct.start();
+	ulrich2::interleaved_binary_fuse_filter<> iff(elems);
+
+/*	while (true)
+	{
+		bool success = true;
+		for (int e = 0; e < bins ; ++e)
+		{
+			std::vector<uint64_t> tmp{};
+			for (uint64_t i = 0; i < elements_per_bin; ++i)
+			{
+				uint64_t key = (e*elements_per_bin) + i;
+				tmp.emplace_back(key);
+			}
+			success = ixf.add_bin_elements(e, tmp);
+			if (!success)
+			{
+				ixf.clear();
+				ixf.set_seed();
+				break;
+			}
+			if (e == 2)
+				elems=std::move(tmp);
+		}
+
+		if (success)
+			break;
+	}
+	*/
+	iff_construct.stop();
+	std::cout << "Built IFF in " << iff_construct.elapsed() << " seconds" << std::endl;
+
+	StopClock iff_query{};
+	iff_query.start();
+	typedef ulrich2::interleaved_binary_fuse_filter<>::counting_agent_type< uint64_t > TIFFAgent;
+	TIFFAgent iff_count_agent = iff.counting_agent< uint64_t >();
+	//auto result = count_agent.bulk_count(readHs);
+	auto iff_result = iff_count_agent.bulk_count(elems[2]);
+	iff_query.stop();
+	//seqan3::debug_stream << iff_result << "\n";
+
+	double fpr {0.0};
+	for (int i =0; i < iff_result.size(); ++i)
+	{
+		if (i == 2)
+			continue;
+		fpr += (double) iff_result[i] / (double) elements_per_bin;
+	}
+	fpr /= (double) (bins - 1);
+	std::cout << "FPR of the IFF: " << fpr << std::endl;
+	double mbytes = (double) iff.bit_size() / (double) 8388608;
+	std::cout << "Size of the IFF: " << mbytes << " MBytes" << std::endl;
+	std::cout << "Queried " << elems[2].size() <<" keys in IFF in " << iff_query.elapsed() << " seconds" << std::endl;
+
+
+	StopClock iff_store{};
+	iff_store.start();
+	std::string filter_file = "test.iff";
+	
+	std::ofstream               os( filter_file, std::ios::binary );
+    cereal::BinaryOutputArchive archive( os );
+    archive( iff );  
+	iff_store.stop();
+	std::cout << "Stored IFF in " << iff_store.elapsed() << " seconds" << std::endl;
+
+}
+
+void construct_and_query_ibf(size_t bins, size_t elements_per_bin)
+{
+	
+	StopClock ibf_construct{};
+	ibf_construct.start();
+	uint64_t BinSizeBits = get_bin_size(0.0039, 3, elements_per_bin);
+	std::cout << "Size of 1 Bin in MByte: " << (double) BinSizeBits / (double) 8388608 << std::endl;
+	seqan3::interleaved_bloom_filter ibf{seqan3::bin_count{bins}, seqan3::bin_size{BinSizeBits}, seqan3::hash_function_count{3u}};
+	std::vector<uint64_t> elems{};
+	for (uint16_t e = 0; e < bins; ++e)
+	{
+		for (uint64_t i = 0; i < elements_per_bin; ++i)
+		{
+			uint64_t key = (e*elements_per_bin) + i;
+			ibf.emplace(key, seqan3::bin_index{e});
+			if (e == 2)
+				elems.emplace_back(key);
+
+		}
+	}
+	ibf_construct.stop();
+	std::cout << "Built IBF in " << ibf_construct.elapsed() << " seconds" << std::endl;
+
+	StopClock ibf_query{};
+	ibf_query.start();
+	typedef seqan3::interleaved_bloom_filter<>::counting_agent_type< uint64_t > TIBFAgent;
+	TIBFAgent ibf_count_agent = ibf.counting_agent< uint64_t >();
+	auto ibf_result = ibf_count_agent.bulk_count(elems);
+	ibf_query.stop();
+	//seqan3::debug_stream << ibf_result << '\n';
+	double mbytes = (double) ibf.bit_size() / (double) 8388608;
+	std::cout << "Size of the IBF: " << mbytes << " MBytes" << std::endl;
+	std::cout << "Queried " << elems.size() <<" keys in IBF in " << ibf_query.elapsed() << " seconds" << std::endl;
+
+	StopClock ibf_store{};
+	ibf_store.start();
+	std::string filter_file = "test.ibf";
+	
+	std::ofstream               os( filter_file, std::ios::binary );
+    cereal::BinaryOutputArchive archive( os );
+    archive( ibf );  
+	ibf_store.stop();
+	std::cout << "Stored IBF in " << ibf_store.elapsed() << " seconds" << std::endl;
+
+}
+
+void load_and_query_ixf(const std::string filter_file, size_t elements, size_t batches)
+{
+	seqan3::interleaved_xor_filter<> ixf{};
+	std::ifstream              is( filter_file, std::ios::binary );
+    cereal::BinaryInputArchive archive( is );
+    archive( ixf );
+
+	std::cout << "IXF successfully loaded" << std::endl;
+//	auto agent = ixf.membership_agent();
+//    auto & result = agent.bulk_contains(2876);
+    //seqan3::debug_stream << result << '\n';
+	typedef seqan3::interleaved_xor_filter<>::counting_agent_type< uint64_t > TIXFAgent;
+	TIXFAgent ixf_count_agent = ixf.counting_agent< uint64_t >();
+	StopClock ixf_query{};
+	ixf_query.start();
+	for (uint64_t b = 0; b < batches; ++b)
+	{
+//		std::cout << "Batch: " << b+1 << std::endl;
+		std::vector<uint64_t> tmp{};
+		for (uint64_t key = 0; key < elements; ++key)
+		{
+			tmp.emplace_back(key);
+		}
+		auto ixf_result = ixf_count_agent.bulk_count(tmp);
+	}
+	
+	ixf_query.stop();
+	std::cout << "Queried " << batches * elements <<" keys in IBF in " << ixf_query.elapsed() << " seconds" << std::endl;
+
+}
 
 int main(int argc, char const **argv)
 {
@@ -378,69 +611,53 @@ int main(int argc, char const **argv)
 //	std::vector<uint64_t> v2{7465, 2876, 8576, 856, 6586, 5876, 7654, 5785};
 	elems.emplace_back(std::move(v2));
 */
-	std::vector<uint64_t> not_included{};
-	for (int e = 1; e <= 11 ; ++e)
+	size_t nr_elems = atoi(argv[1]);
+	size_t nr_bins = atoi(argv[2]);
+
+//	construct_and_query_iff(nr_bins, nr_elems);
+	construct_and_query_ibf(nr_bins, nr_elems);
+	construct_and_query_ixf(nr_bins, nr_elems);
+
+//	load_and_query_ixf("test_mum3.ixf", nr_elems, nr_bins);
+
+/*	std::vector<uint64_t> v1{127, 2876, 2875, 457, 458, 875, 7654, 7566, 5876};
+	elems.emplace_back(std::move(v1));
+	std::vector<uint64_t> v2{7465, 2876, 8576, 856, 6586, 5876, 7654, 5785};
+	elems.emplace_back(std::move(v2));
+*/
+
+//	std::vector<uint64_t> readHs{7465, 2876, 8576, 856, 6586, 5876, 7654};
+	
+	
+	/*for (int e = 0; e < nr_bins ; ++e)
 	{
 		std::vector<uint64_t> tmp{};
-		for (uint64_t i = 0; i < 10000000; ++i)
+		for (uint64_t i = 0; i < nr_elems; ++i)
 		{
-			uint64_t key = 11*i + e;
+			uint64_t key = (e*nr_elems) + i;
 			tmp.emplace_back(key);
 		}
-		if (e < 11)
-			elems.emplace_back(std::move(tmp));
-		else
-			not_included = std::move(tmp);
+		elems.emplace_back(std::move(tmp));
 	}
-
-
-
+	*/
 	
-//	seqan3::dna4_vector read2{"GTTATGGCGGAGTTCTTTCTGCTTTAACAGTTCGCAAACATTATACAAAAGAACAAGCACGCGTGACTGTGGTAAACAAATACCCAAC"_dna4};
-//	auto readHashes = seqan3::views::kmer_hash(read2, seqan3::ungapped{15});
-//	std::vector<uint64_t> readHs = std::vector<uint64_t>(readHashes.begin(), readHashes.end());
-	//std::vector<uint64_t> readHs{7465, 2876, 8576, 856, 6586, 5876, 7654};
-	seqan3::interleaved_xor_filter<> ixf(elems);
-	std::cout << "Filter ready" << std::endl;
-	//auto agent = xf.membership_agent();
-    //auto & result2 = agent.bulk_contains(7465);
-    //seqan3::debug_stream << result2 << '\n'; // prints [0,0,0,1,0,0,0,0,0,0,0,0]
-
-	//auto agent = xf.membership_agent();
-	typedef seqan3::interleaved_xor_filter<>::counting_agent_type< uint64_t > TAgent;
-	TAgent count_agent = ixf.counting_agent< uint64_t >();
-	//auto result = count_agent.bulk_count(readHs);
-	auto result = count_agent.bulk_count(elems[2]);
-//    auto & result = agent.bulk_contains(712);
-	//std::cout << read2.size() - 15 + 1 << std::endl;
+/*	ulrich2::interleaved_binary_fuse_filter<> iff(elems);
+	auto agent = iff.membership_agent();
+    auto & result = agent.bulk_contains(2876);
     seqan3::debug_stream << result << '\n';
-	std::cout << ixf.bit_size() << std::endl;
-
-	
-
+*/
+//	ulrich::interleaved_xor_filter<> ixf(elems);
 /*
-	uint64_t BinSizeBits = get_bin_size(0.01, 3, 10000000);
-	std::cout << BinSizeBits << std::endl;
-	seqan3::interleaved_bloom_filter ibf{seqan3::bin_count{10u}, seqan3::bin_size{BinSizeBits}, seqan3::hash_function_count{3u}};
-	for (uint16_t i = 0; i < elems.size(); ++i)
-	{
-		for (uint64_t key : elems[i])
-			ibf.emplace(key, seqan3::bin_index{i});
-	}
-
-	typedef seqan3::interleaved_bloom_filter<>::counting_agent_type< uint64_t > TAgent;
-	TAgent count_agent = ibf.counting_agent< uint64_t >();
-	auto result = count_agent.bulk_count(elems[2]);
+	typedef ulrich2::interleaved_binary_fuse_filter<>::counting_agent_type< uint64_t > TIFFAgent;
+	TIFFAgent iff_count_agent = iff.counting_agent< uint64_t >();
+	auto result = iff_count_agent.bulk_count(readHs);
 	seqan3::debug_stream << result << '\n';
-	std::cout << ibf.bit_size() << std::endl;
-*/	
+*/
 	
-	std::string filter_file = "test.ixf";
-/*	
-	std::ofstream               os( filter_file, std::ios::binary );
-    cereal::BinaryOutputArchive archive( os );
-    archive( ixf );  
-*/	
+	
+	
+
+
 /*
 	seqan3::interleaved_bloom_filter ibf2{};
 	std::ifstream              is( filter_file, std::ios::binary );
@@ -451,7 +668,8 @@ int main(int argc, char const **argv)
 	auto result2 = count_agent2.bulk_count(elems[2]);
 	seqan3::debug_stream << result2 << '\n';
 */
-	seqan3::interleaved_xor_filter<> ixf2{};
+
+/*	ulrich::interleaved_xor_filter<> ixf2{};
 	std::ifstream              is( filter_file, std::ios::binary );
     cereal::BinaryInputArchive archive( is );
     archive( ixf2 );
@@ -459,7 +677,7 @@ int main(int argc, char const **argv)
 	TAgent count_agent2 = ixf2.counting_agent< uint64_t >();
 	auto result2 = count_agent2.bulk_count(elems[2]);
 	seqan3::debug_stream << result2 << '\n';
-
+*/
 	return 0;
 }
 
