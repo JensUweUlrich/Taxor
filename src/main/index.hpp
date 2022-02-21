@@ -35,8 +35,10 @@ static inline void get_next_strobe(std::vector<uint64_t> &string_hashes, uint64_
 
 
 //mers_vector seq_to_kmers(int k, std::string &seq, unsigned int ref_index);
-std::vector<uint64_t> seq_to_randstrobes(int k, int w_min, int w_max, const seqan3::dna5_vector &seq, 
-                                         int s, int t, uint64_t q, int max_dist);
+//std::vector<uint64_t> seq_to_randstrobes(int k, int w_min, int w_max, const seqan3::dna5_vector &seq, 
+//                                         int s, int t, uint64_t q, int max_dist);
+
+std::vector<uint64_t> seq_to_syncmers(int k, const seqan3::dna5_vector &seq, int s, int t);
                                          
 read_hash_vector seq_to_randstrobes_read(int k, int w_min, int w_max, const seqan3::dna5_vector &seq, 
                                          int s, int t, uint64_t q, int max_dist);

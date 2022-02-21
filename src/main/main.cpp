@@ -8,14 +8,13 @@
 #include <set>
 #include <map>
 #include <filesystem>
-#include <seqan3/io/sequence_file/all.hpp>
-#include <seqan3/alphabet/nucleotide/all.hpp>
+
+
 #include <seqan3/search/views/kmer_hash.hpp>
 #include <seqan3/alphabet/views/to_char.hpp>
 #include <seqan3/alphabet/views/char_to.hpp>
 #include <seqan3/core/debug_stream.hpp>
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
-#include <seqan3/search/dream_index/interleaved_xor_filter.hpp>
 
 #include <cereal/archives/binary.hpp>
 
@@ -24,30 +23,13 @@
 #include "interleaved_binary_fuse_filter.hpp"
 
 #include "index.hpp"
-#include "filter.hpp"
+#include "build.hpp"
 
 using namespace seqan3::literals;
 
 //std::string gtdb_root = "D:\\gtdb_genomes_reps_r202";
 
-struct species
-{
-	std::string name;
-	std::string organism_name;
-	std::string accession_id;
-};
 
-struct Seqs {
-	
-	std::string       seqid;
-	seqan3::dna5_vector seq;
-	
-};
-
-inline std::string get_seqid( std::string header )
-{
-    return header.substr( 0, header.find( ' ' ) );
-}
 
  void read_tsv(std::string fname, std::vector<std::vector<std::string> > &lines) {
 	std::ifstream ifs(fname);
@@ -242,73 +224,7 @@ inline uint64_t get_bin_size( double false_positive, uint16_t hash_functions, ui
 	 }
  }
 
- /**
-   * split underlying sequence based on stretches of N's
-   * @seq      : reference sequence as a string
-   * @seqlen   : length of the sequence
-   * @return   : vector of subsequences, that results from splitting the original sequence
-   */
- std::vector<std::string> cutOutNNNs(std::string& seq, uint64_t seqlen)
- {
-	 std::vector<std::string> splittedStrings;
-	 size_t start = 0;
-	 size_t end = 0;
-
-	 while ((start = seq.find_first_not_of("N", end)) != std::string::npos)
-	 {
-		 end = seq.find("N", start);
-		 if (end > seqlen)
-		 {
-			 std::string s = seq.substr(start, seqlen - start - 1);
-			 splittedStrings.push_back(s);
-			 break;
-		 }
-		 std::string s = seq.substr(start, end - start);
-
-		 splittedStrings.push_back(s);
-	 }
-	 return splittedStrings;
- }
-
-
- /**
-	   read reference sequences from files and store them in reference sequence queue
-	   @queue_refs:    thread safe queue that stores reference sequences to put in the ibf
-	   @config:        settings used to build the IBF (reference file path, number of references, kmer size, fragment length)
-	   @stats:         statistics (like runtime for specific tasks) for building the ibf
-	   @throws:        FileParserException
-   */
-
- void parse_ref_seqs(std::vector< Seqs >& queue_refs, const std::filesystem::path& reference_file)
- {
-	 //seqan::SeqFileIn seqFileIn;
-
-	 seqan3::sequence_file_input fin{reference_file};
-
-
-	 for ( auto& [seq, header, qual] : fin)
-	 {
-		 const std::string seqid = get_seqid( header );
-
-		 int counter = 1;
-		 auto charstring = seq | seqan3::views::to_char;
-		 std::string s = std::string(charstring.begin(), charstring.end());
-
-	 	 // remove all Ns from the sequence
-		 std::stringstream buf;
-		 for (std::string subseq : cutOutNNNs(s, s.size()))
-		 {
-			 buf << subseq;
-		 }
-		 s =  buf.str();
-		 auto r = s | seqan3::views::char_to<seqan3::dna5>;
-		 seqan3::dna5_vector newseq(r.begin(), r.end());
-
-		 queue_refs.emplace_back(Seqs{ seqid, newseq });
-					
-	 }
-			 
- }
+ 
 
 void construct_and_query_ixf(size_t bins, size_t elements_per_bin)
 {
@@ -544,6 +460,8 @@ void load_and_query_ixf(const std::string filter_file, size_t elements, size_t b
 
 }
 
+
+
 int main(int argc, char const **argv)
 {
 	uint64_t q_p = pow (2, 8) - 1;
@@ -560,87 +478,24 @@ int main(int argc, char const **argv)
 
 	std::string gtdb_root = "/media/jens/INTENSO/gtdb_genomes_reps_r202";
 	std::string filename = gtdb_root + "/gtdb_reps_accessions_NCBI_name.tsv";
-	std::map<std::string, std::vector<species>> genera{};
+	std::filesystem::path bin_meta_file = "GTDB_r202_bin_meta.tsv";
+	
+	TGenMap genera{};
 	getGenomeRepsByGenus(filename, std::ref(genera));
 
 	//uint64_t max_hashes = 0;
-	uint64_t species_counter = 0;
+	
 	uint64_t min_syncmers = UINT64_MAX;
 	uint64_t max_syncmers = 0;
 	uint64_t all_syncmers = 0;
-	uint64_t bin_nr = 0;
+	
 
-	std::vector<std::vector<uint64_t>> genome_hashes{};
-	for (std::pair<std::string, std::vector<species>> genus : genera)
-	{
-//		if (genus.first.compare("Pseudomonas") != 0)
-//			continue;
-//		auto filepath = std::filesystem::path(gtdb_root) / "genera" / genus.first;
-//		filepath.replace_extension("fna.gz");
-//		FILE* outfile = fopen(seqan::toCString(filepath.string()), "wb");
-//		std::cout << filepath.string() << std::endl;
-		std::string outy{};
-		for (species sp : genus.second)
-		{
-//			std::cout << sp.name << std::endl;
-			auto inpath = std::filesystem::path(gtdb_root) / "gtdb_genomes_reps_r202";
-			if (sp.accession_id.substr(0, 3).compare("GCA") == 0)
-			{
-				inpath /= "GCA";
-			}
-			else
-			{
-				inpath /= "GCF";
-			}
-			std::string infilename = sp.accession_id + "_genomic.fna.gz";
-			inpath = inpath / sp.accession_id.substr(4, 3) / sp.accession_id.substr(7, 3) / sp.accession_id.substr(10, 3) / infilename;
+	//std::vector<std::vector<uint64_t>> genome_hashes{};
 
-			std::vector<Seqs> ref_seqs{};
-			parse_ref_seqs(ref_seqs, inpath);
-			
-			
-			std::set<uint64_t> randstrobes{};
-			for (const auto & ref_s : ref_seqs)
-			{
-				std::vector<uint64_t> strobe_hashes = seq_to_randstrobes(kmer_size, w_min, w_max, ref_s.seq, sync_size, t_syncmer, q_p, max_dist);
-				randstrobes.insert(strobe_hashes.begin(), strobe_hashes.end());
-			}
-			
-//			genome_hashes.emplace_back(std::move(std::vector<uint64_t>(randstrobes.begin(), randstrobes.end())));
-
-			all_syncmers += randstrobes.size();
-
-			bin_nr += (randstrobes.size() / 50000) + 1;
-			
-			if (randstrobes.size() > max_syncmers)
-				max_syncmers = randstrobes.size();
-			
-			if (randstrobes.size() < min_syncmers)
-				min_syncmers = randstrobes.size();
-
-			if (++species_counter % 1000 == 0)
-			{
-				std::cout << species_counter << "\t" << min_syncmers << "\t" << max_syncmers << std::endl;
-			}
-			
-		}
-	}
-
-
-
-	size_t bin_size_ = 32 + 1.23 * max_syncmers;
-	size_t ixf_bit_size = bin_size_ * species_counter * 8;
-	double mbytes = (double) ixf_bit_size / (double) 8388608;
-	std::cout << "Size of the IXF(max): " << mbytes << " MBytes" << std::endl;
-
-	size_t filter_size_ = 32 + 1.23 * all_syncmers * 8;
-	mbytes = (double) filter_size_ / (double) 8388608;
-	std::cout << "Size of the IXF(min): " << mbytes << " MBytes" << std::endl;
-
-	size_t real_filter_size = 32 + 1.23 * 50000;
-	ixf_bit_size = real_filter_size * bin_nr * 8;
-	mbytes = (double) ixf_bit_size / (double) 8388608;
-	std::cout << "Size of the IXF(50k): " << mbytes << " MBytes" << std::endl;
+	// compute number of bins based on maximum number of elements per bin
+	
+	build_ixf_index(genera, "GTDB_r202.ixf", bin_meta_file, gtdb_root, kmer_size, sync_size, t_syncmer);	
+	
 
 /*
 	std::filesystem::path genomes_path = argv[1];

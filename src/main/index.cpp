@@ -411,16 +411,17 @@ static inline void get_next_strobe_dist_constraint(std::vector<uint64_t> &string
 
 }
 
-std::vector<uint64_t> seq_to_randstrobes(int k, int w_min, int w_max, const seqan3::dna5_vector &seq, 
-                                         int s, int t, uint64_t q, int max_dist)
+std::vector<uint64_t> seq_to_syncmers(int k, const seqan3::dna5_vector &seq, int s, int t)
+//std::vector<uint64_t> seq_to_randstrobes(int k, int w_min, int w_max, const seqan3::dna5_vector &seq, 
+//                                         int s, int t, uint64_t q, int max_dist)
 {
     std::vector<uint64_t> randstrobes;
 
-    if (seq.size() < w_max) 
+/*    if (seq.size() < w_max) 
     {
         return randstrobes;
     }
-
+*/
     //std::transform(seq.begin(), seq.end(), seq.begin(), ::toupper);
     uint64_t kmask=(1ULL<<2*k) - 1;
 
