@@ -1,5 +1,5 @@
-set(Main_SRC "main.cpp")
-file(GLOB MAIN_HDRS "*.hpp")
+file(GLOB Main_SRC "*.cpp" "*.c")
+file(GLOB MAIN_HDRS "*.hpp" "*.h")
 add_executable (${PROJECT_NAME} ${MAIN_HDRS} ${Main_SRC})
 #find_package (Threads)
 

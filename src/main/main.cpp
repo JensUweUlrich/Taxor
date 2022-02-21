@@ -23,6 +23,9 @@
 #include "StopClock.hpp"
 #include "interleaved_binary_fuse_filter.hpp"
 
+#include "index.hpp"
+#include "filter.hpp"
+
 using namespace seqan3::literals;
 
 //std::string gtdb_root = "D:\\gtdb_genomes_reps_r202";
@@ -37,7 +40,7 @@ struct species
 struct Seqs {
 	
 	std::string       seqid;
-	seqan3::dna4_vector seq;
+	seqan3::dna5_vector seq;
 	
 };
 
@@ -298,8 +301,8 @@ inline uint64_t get_bin_size( double false_positive, uint16_t hash_functions, ui
 			 buf << subseq;
 		 }
 		 s =  buf.str();
-		 auto r = s | seqan3::views::char_to<seqan3::dna4>;
-		 seqan3::dna4_vector newseq(r.begin(), r.end());
+		 auto r = s | seqan3::views::char_to<seqan3::dna5>;
+		 seqan3::dna5_vector newseq(r.begin(), r.end());
 
 		 queue_refs.emplace_back(Seqs{ seqid, newseq });
 					
@@ -543,20 +546,43 @@ void load_and_query_ixf(const std::string filter_file, size_t elements, size_t b
 
 int main(int argc, char const **argv)
 {
-	/*
-	std::string filename = gtdb_root + "\\gtdb_reps_accessions_NCBI_name.tsv";
+	uint64_t q_p = pow (2, 8) - 1;
+	int kmer_size = 16;
+	int sync_size = 4;
+	int low_sync_offset = 2;
+	int up_sync_offset = 12;
+	int max_dist = 255;
+	int w_min = kmer_size/(kmer_size-sync_size+1) + low_sync_offset > 1 ? kmer_size/(kmer_size-sync_size+1) + low_sync_offset : 1;
+    int w_max = kmer_size/(kmer_size-sync_size+1) + up_sync_offset;
+    int t_syncmer = (kmer_size-sync_size)/2 + 1;
+
+
+
+	std::string gtdb_root = "/media/jens/INTENSO/gtdb_genomes_reps_r202";
+	std::string filename = gtdb_root + "/gtdb_reps_accessions_NCBI_name.tsv";
 	std::map<std::string, std::vector<species>> genera{};
 	getGenomeRepsByGenus(filename, std::ref(genera));
 
+	//uint64_t max_hashes = 0;
+	uint64_t species_counter = 0;
+	uint64_t min_syncmers = UINT64_MAX;
+	uint64_t max_syncmers = 0;
+	uint64_t all_syncmers = 0;
+	uint64_t bin_nr = 0;
+
+	std::vector<std::vector<uint64_t>> genome_hashes{};
 	for (std::pair<std::string, std::vector<species>> genus : genera)
 	{
-		auto filepath = std::filesystem::path(gtdb_root) / "genera" / genus.first;
-		filepath.replace_extension("fna.gz");
-		FILE* outfile = fopen(seqan::toCString(filepath.string()), "wb");
-		std::cout << filepath.string() << std::endl;
+//		if (genus.first.compare("Pseudomonas") != 0)
+//			continue;
+//		auto filepath = std::filesystem::path(gtdb_root) / "genera" / genus.first;
+//		filepath.replace_extension("fna.gz");
+//		FILE* outfile = fopen(seqan::toCString(filepath.string()), "wb");
+//		std::cout << filepath.string() << std::endl;
 		std::string outy{};
 		for (species sp : genus.second)
 		{
+//			std::cout << sp.name << std::endl;
 			auto inpath = std::filesystem::path(gtdb_root) / "gtdb_genomes_reps_r202";
 			if (sp.accession_id.substr(0, 3).compare("GCA") == 0)
 			{
@@ -568,115 +594,154 @@ int main(int argc, char const **argv)
 			}
 			std::string infilename = sp.accession_id + "_genomic.fna.gz";
 			inpath = inpath / sp.accession_id.substr(4, 3) / sp.accession_id.substr(7, 3) / sp.accession_id.substr(10, 3) / infilename;
+
+			std::vector<Seqs> ref_seqs{};
+			parse_ref_seqs(ref_seqs, inpath);
 			
-			std::string fileData;
-			if (!loadBinaryFile(inpath.string(), fileData)) {
-				printf("Error loading input file.");
-				return 0;
+			
+			std::set<uint64_t> randstrobes{};
+			for (const auto & ref_s : ref_seqs)
+			{
+				std::vector<uint64_t> strobe_hashes = seq_to_randstrobes(kmer_size, w_min, w_max, ref_s.seq, sync_size, t_syncmer, q_p, max_dist);
+				randstrobes.insert(strobe_hashes.begin(), strobe_hashes.end());
 			}
+			
+//			genome_hashes.emplace_back(std::move(std::vector<uint64_t>(randstrobes.begin(), randstrobes.end())));
 
-			// Uncompress the file data  
-			std::string data;
-			if (!gzipInflate(fileData, data)) {
-				printf("Error decompressing file.");
-				return 0;
+			all_syncmers += randstrobes.size();
+
+			bin_nr += (randstrobes.size() / 50000) + 1;
+			
+			if (randstrobes.size() > max_syncmers)
+				max_syncmers = randstrobes.size();
+			
+			if (randstrobes.size() < min_syncmers)
+				min_syncmers = randstrobes.size();
+
+			if (++species_counter % 1000 == 0)
+			{
+				std::cout << species_counter << "\t" << min_syncmers << "\t" << max_syncmers << std::endl;
 			}
-
-
-			std::stringstream fdata(data);
-			std::string line;
-			while (getline(fdata, line)) {
-				if (line.substr(0, 1).compare(">") == 0)
-				{
-					std::cout << line << std::endl;
-				}
-			}
-			*/
-
-	std::vector<std::vector<uint64_t>> elems{};
-/*	std::vector<Seqs> ref_seqs{};
-	parse_ref_seqs(ref_seqs, std::filesystem::path(argv[1]));
-	auto refHashes = seqan3::views::kmer_hash(ref_seqs[0].seq, seqan3::ungapped{15});
-	std::set<uint64_t> kmerHashSet(refHashes.begin(), refHashes.end());
-	std::vector<uint64_t> v1 = std::vector(kmerHashSet.begin(), kmerHashSet.end());
-//	std::vector<uint64_t> v1{127, 2876, 2875, 457, 458, 875, 7654, 7566, 5876};
-	elems.emplace_back(std::move(v1));
-
-	ref_seqs.clear();
-	kmerHashSet.clear();
-	parse_ref_seqs(ref_seqs, std::filesystem::path(argv[2]));
-	refHashes = seqan3::views::kmer_hash(ref_seqs[0].seq, seqan3::ungapped{15});
-	kmerHashSet = std::set<uint64_t>(refHashes.begin(), refHashes.end());
-	std::vector<uint64_t> v2 = std::vector(kmerHashSet.begin(), kmerHashSet.end());
-//	std::vector<uint64_t> v2{7465, 2876, 8576, 856, 6586, 5876, 7654, 5785};
-	elems.emplace_back(std::move(v2));
-*/
-	size_t nr_elems = atoi(argv[1]);
-	size_t nr_bins = atoi(argv[2]);
-
-//	construct_and_query_iff(nr_bins, nr_elems);
-	construct_and_query_ibf(nr_bins, nr_elems);
-	construct_and_query_ixf(nr_bins, nr_elems);
-
-//	load_and_query_ixf("test_mum3.ixf", nr_elems, nr_bins);
-
-/*	std::vector<uint64_t> v1{127, 2876, 2875, 457, 458, 875, 7654, 7566, 5876};
-	elems.emplace_back(std::move(v1));
-	std::vector<uint64_t> v2{7465, 2876, 8576, 856, 6586, 5876, 7654, 5785};
-	elems.emplace_back(std::move(v2));
-*/
-
-//	std::vector<uint64_t> readHs{7465, 2876, 8576, 856, 6586, 5876, 7654};
-	
-	
-	/*for (int e = 0; e < nr_bins ; ++e)
-	{
-		std::vector<uint64_t> tmp{};
-		for (uint64_t i = 0; i < nr_elems; ++i)
-		{
-			uint64_t key = (e*nr_elems) + i;
-			tmp.emplace_back(key);
+			
 		}
-		elems.emplace_back(std::move(tmp));
 	}
-	*/
-	
-/*	ulrich2::interleaved_binary_fuse_filter<> iff(elems);
-	auto agent = iff.membership_agent();
-    auto & result = agent.bulk_contains(2876);
-    seqan3::debug_stream << result << '\n';
-*/
-//	ulrich::interleaved_xor_filter<> ixf(elems);
-/*
-	typedef ulrich2::interleaved_binary_fuse_filter<>::counting_agent_type< uint64_t > TIFFAgent;
-	TIFFAgent iff_count_agent = iff.counting_agent< uint64_t >();
-	auto result = iff_count_agent.bulk_count(readHs);
-	seqan3::debug_stream << result << '\n';
-*/
-	
-	
-	
 
+
+
+	size_t bin_size_ = 32 + 1.23 * max_syncmers;
+	size_t ixf_bit_size = bin_size_ * species_counter * 8;
+	double mbytes = (double) ixf_bit_size / (double) 8388608;
+	std::cout << "Size of the IXF(max): " << mbytes << " MBytes" << std::endl;
+
+	size_t filter_size_ = 32 + 1.23 * all_syncmers * 8;
+	mbytes = (double) filter_size_ / (double) 8388608;
+	std::cout << "Size of the IXF(min): " << mbytes << " MBytes" << std::endl;
+
+	size_t real_filter_size = 32 + 1.23 * 50000;
+	ixf_bit_size = real_filter_size * bin_nr * 8;
+	mbytes = (double) ixf_bit_size / (double) 8388608;
+	std::cout << "Size of the IXF(50k): " << mbytes << " MBytes" << std::endl;
 
 /*
-	seqan3::interleaved_bloom_filter ibf2{};
-	std::ifstream              is( filter_file, std::ios::binary );
-    cereal::BinaryInputArchive archive( is );
-    archive( ibf2 );
+	std::filesystem::path genomes_path = argv[1];
+	std::vector<std::vector<uint64_t>> genome_hashes{};
+	for (const auto & entry : std::filesystem::directory_iterator(argv[1]))
+	{
+		std::vector<Seqs> ref_seqs{};
+		parse_ref_seqs(ref_seqs, entry.path());
+		uint64_t kmers = 0;
+		uint64_t strobes = 0;
+		std::set<uint64_t> randstrobes{};
+		for (const auto & ref_s : ref_seqs)
+		{
+			std::vector<uint64_t> strobe_hashes = seq_to_randstrobes(kmer_size, w_min, w_max, ref_s.seq, sync_size, t_syncmer, q_p, max_dist);
+			randstrobes.insert(strobe_hashes.begin(), strobe_hashes.end());
+			strobes += strobe_hashes.size();
+			kmers += ref_s.seq.size() - kmer_size + 1;
+		}
+		float ratio = (float) strobes / (float) kmers;
+		std::cout << entry.path() << std::endl;
+		std::cout << "kmers: " << kmers << "\t randstrobes: " << strobes << "\t ratio: " << ratio <<std::endl;
+		genome_hashes.emplace_back(std::move(std::vector<uint64_t>(randstrobes.begin(), randstrobes.end())));
+	}
 
-	TAgent count_agent2 = ibf2.counting_agent< uint64_t >();
-	auto result2 = count_agent2.bulk_count(elems[2]);
-	seqan3::debug_stream << result2 << '\n';
-*/
+	seqan3::interleaved_xor_filter<> ixf(genome_hashes);
+	double mbytes = (double) ixf.bit_size() / (double) 8388608;
+	std::cout << "Size of the IXF: " << mbytes << " MBytes" << std::endl;
+	
+	std::filesystem::path read_file = argv[2];
+	seqan3::sequence_file_input fin{read_file};
+	typedef seqan3::interleaved_xor_filter<>::counting_agent_type< uint64_t > TIXFAgent;
 
-/*	ulrich::interleaved_xor_filter<> ixf2{};
-	std::ifstream              is( filter_file, std::ios::binary );
-    cereal::BinaryInputArchive archive( is );
-    archive( ixf2 );
+	double ratio_sum = 0.0;
+	uint64_t nr_reads = 0;
+	std::vector<double> sensitivity(ixf.bin_count());
+	std::fill(sensitivity.begin(), sensitivity.end(), 0.0);
+	std::vector<uint64_t> classified(ixf.bin_count());
+	std::fill(classified.begin(), classified.end(), 0);
+	int count = 0;
+	for ( const auto& [seq, header, qual] : fin)
+	{
 
-	TAgent count_agent2 = ixf2.counting_agent< uint64_t >();
-	auto result2 = count_agent2.bulk_count(elems[2]);
-	seqan3::debug_stream << result2 << '\n';
+		if (seq.size() < 1000)
+			continue;
+
+		read_hash_vector rhv = seq_to_randstrobes_read(kmer_size, w_min, w_max, seq, sync_size, t_syncmer, q_p, max_dist);
+		uint64_t strobe_nr = rhv[0].first.size();
+//		TInterval ci = calculateCI(0.1, kmer_size, strobe_nr, 0.95);
+//		uint64_t threshold = strobe_nr - ci.second;
+		std::vector<uint64_t> max_found(ixf.bin_count());
+		std::fill(max_found.begin(), max_found.end(), 0);
+		for (const auto & p : rhv)
+		{
+			TIXFAgent ixf_count_agent = ixf.counting_agent< uint64_t >();
+			auto ixf_result = ixf_count_agent.bulk_count(p.first);
+			for (int i = 0; i < max_found.size(); ++i)
+			{
+				if (ixf_result[i] > max_found[i])
+					max_found[i] = ixf_result[i];
+			}
+		}
+		double max_ratio = 0.0;
+		uint64_t max_index = UINT64_MAX;
+		std::vector<std::pair<uint64_t, double>> potential_indexes{};
+		for (int i = 0; i < max_found.size(); ++i)
+		{
+			double ratio = (double) max_found[i] / (double) strobe_nr;
+			sensitivity[i] += ratio;
+
+			// Why does 0.05 work so well?
+			if ( ratio > 0.05)
+			{
+				if (ratio > max_ratio)
+					max_ratio = ratio;
+
+				potential_indexes.emplace_back(std::make_pair(i, ratio));
+			}
+		}
+
+		int spec_count = 0;
+		for (const auto & p : potential_indexes)
+		{
+			if (p.second >= max_ratio)
+			{
+				classified[p.first] += 1;
+				if (++spec_count > 1)
+					std::cout << header << std::endl;
+			}
+		}
+		
+		nr_reads++;
+	}
+
+	for (int i=0; i < sensitivity.size(); ++i)
+	{
+		sensitivity[i] /= (double) nr_reads;
+	}
+
+	seqan3::debug_stream << sensitivity << "\n";
+	seqan3::debug_stream << classified << "\n";
+	seqan3::debug_stream << nr_reads << "\n";
 */
 	return 0;
 }
