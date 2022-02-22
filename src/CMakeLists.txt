@@ -24,11 +24,17 @@ if (WIN32)
     set(CMAKE_INSTALL_PREFIX "C:/Apps/${PROJECT_NAME}")
     
 else()
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++20")
     set(CMAKE_INSTALL_PREFIX "/usr/local/${PROJECT_NAME}")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
+        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++2a")
+        add_compile_options("-std=c++20")
+    else()
+        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++20")
+        add_compile_options("-std=c++2a")
+    endif()
     add_compile_options("-Ofast")
 #    add_link_options("stdc++fs")
-    add_compile_options("-std=c++20")
+    
 endif()
 
 # add all subdirectories
