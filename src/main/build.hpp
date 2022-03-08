@@ -3,18 +3,16 @@
 #ifndef build_hpp
 #define build_hpp
 
+
 #include <seqan3/io/sequence_file/all.hpp>
 #include <seqan3/alphabet/nucleotide/all.hpp>
 #include <seqan3/search/dream_index/interleaved_xor_filter.hpp>
+#include "multi_interleaved_xor_filter.hpp"
 
-struct species
-{
-	std::string name;
-	std::string organism_name;
-	std::string accession_id;
-};
+#include "Semaphore.hpp"
+#include "SafeMap.hpp"
+#include "Species.hpp"
 
-typedef std::map<std::string, std::vector<species>> TGenMap;
 
 
 struct Seqs {
@@ -24,7 +22,11 @@ struct Seqs {
 	
 };
 
-typedef std::tuple<std::string, uint64_t, uint64_t> TSpecBin;
+typedef std::map<std::string, std::vector<Species>> TGenMap;
+
+// has to be x % 100 = 0 
+uint64_t max_bins_per_filter = 4300;
+uint64_t breakpoint = 24000;
 
 inline std::string get_seqid( std::string header )
 {
@@ -99,161 +101,311 @@ inline std::string get_seqid( std::string header )
 			 
  }
 
-uint64_t compute_bin_number(TGenMap& genera, const std::string& gtdb_root, int kmer_size, int sync_size, int t_syncmer)
-{
+ std::vector<std::pair<uint64_t, uint64_t>> compute_bin_number_per_species_batch(const std::vector<Species>& species, uint64_t start_species, uint64_t end_species,
+ 											   const std::string& gtdb_root, int kmer_size, int sync_size, int t_syncmer)
+ {
 	uint64_t bin_nr = 0;
-	uint64_t species_counter = 0;
-	for (std::pair<std::string, std::vector<species>> genus : genera)
+	std::vector<std::pair<uint64_t, uint64_t>> sp_index_bins;
+	std::set<uint64_t> syncmers{};
+	for (uint64_t index = start_species; index <species.size() && index < end_species; ++index)
 	{
-		if (genus.first.compare("Pseudomonas") != 0)
-			continue;
-//		auto filepath = std::filesystem::path(gtdb_root) / "genera" / genus.first;
-//		filepath.replace_extension("fna.gz");
-//		FILE* outfile = fopen(seqan::toCString(filepath.string()), "wb");
-//		std::cout << filepath.string() << std::endl;
-		std::string outy{};
-		for (species sp : genus.second)
-		{
 //			std::cout << sp.name << std::endl;
-			auto inpath = std::filesystem::path(gtdb_root) / "gtdb_genomes_reps_r202";
-			if (sp.accession_id.substr(0, 3).compare("GCA") == 0)
-			{
-				inpath /= "GCA";
-			}
-			else
-			{
-				inpath /= "GCF";
-			}
-			std::string infilename = sp.accession_id + "_genomic.fna.gz";
-			inpath = inpath / sp.accession_id.substr(4, 3) / sp.accession_id.substr(7, 3) / sp.accession_id.substr(10, 3) / infilename;
-
-			std::vector<Seqs> ref_seqs{};
-			parse_ref_seqs(ref_seqs, inpath);
-			
-			
-			std::set<uint64_t> randstrobes{};
-			for (const auto & ref_s : ref_seqs)
-			{
-				std::vector<uint64_t> strobe_hashes = seq_to_syncmers(kmer_size, ref_s.seq, sync_size, t_syncmer);
-				randstrobes.insert(strobe_hashes.begin(), strobe_hashes.end());
-			}
-			
-//			genome_hashes.emplace_back(std::move(std::vector<uint64_t>(randstrobes.begin(), randstrobes.end())));
-
-			bin_nr += (randstrobes.size() / 50000) + 1;
-
-			if (++species_counter % 1000 == 0)
-			{
-				std::cout << species_counter << std::endl;
-			}
-			
-		}
-	}
-	return bin_nr;
-}
-
-void write_meta_file(std::vector<TSpecBin>& bin_meta, const std::filesystem::path& file)
-{
-    std::ofstream outfile(file.string());
-    for (const auto & sp_bin : bin_meta)
-	{
-		outfile << std::get<0>(sp_bin) << "\t" << std::get<1>(sp_bin) << "\t" << std::get<2>(sp_bin) << std::endl;
-	}
-    outfile.close();
-}
-
-void build_ixf_index(TGenMap& genera, const std::string& filter_file, const std::filesystem::path& bin_meta_file,
-                     const std::string& gtdb_root, int kmer_size, int sync_size, int t_syncmer)
-{
-    uint64_t bin_nr = compute_bin_number(std::ref(genera), gtdb_root,kmer_size, sync_size, t_syncmer);
-
-	std::cout << bin_nr << std::endl;
-
-	seqan3::interleaved_xor_filter<> ixf(bin_nr, 50000);
-	bool success = true;
-	bin_nr = 0;
-
-	std::vector<TSpecBin> bin_meta{};
-	while (true)
-	{
-		uint64_t species_counter = 0;
-		
-		for (std::pair<std::string, std::vector<species>> genus : genera)
+		auto inpath = std::filesystem::path(gtdb_root) / "gtdb_genomes_reps_r202";
+		if (species[index].accession_id.substr(0, 3).compare("GCA") == 0)
 		{
-		if (genus.first.compare("Pseudomonas") != 0)
-			continue;
-
-			std::string outy{};
-			for (species sp : genus.second)
-			{
-				std::cout << sp.name << std::endl;
-				auto inpath = std::filesystem::path(gtdb_root) / "gtdb_genomes_reps_r202";
-				if (sp.accession_id.substr(0, 3).compare("GCA") == 0)
-				{
-					inpath /= "GCA";
-				}
-				else
-				{
-					inpath /= "GCF";
-				}
-				std::string infilename = sp.accession_id + "_genomic.fna.gz";
-				inpath = inpath / sp.accession_id.substr(4, 3) / sp.accession_id.substr(7, 3) / sp.accession_id.substr(10, 3) / infilename;
-
-				std::vector<Seqs> ref_seqs{};
-				parse_ref_seqs(ref_seqs, inpath);
-			
-			
-				std::set<uint64_t> randstrobes{};
-				for (const auto & ref_s : ref_seqs)
-				{
-					std::vector<uint64_t> strobe_hashes = seq_to_syncmers(kmer_size, ref_s.seq, sync_size, t_syncmer);
-					randstrobes.insert(strobe_hashes.begin(), strobe_hashes.end());
-				}
-
-				std::vector<uint64_t> syncmers(randstrobes.begin(), randstrobes.end());
-				uint64_t start_bin = bin_nr;
-				for (int j = 0; j < (randstrobes.size() / 50000) + 1 ; j++)
-				{
-					std::vector<uint64_t>::iterator first = syncmers.begin() + (j*50000);
-					std::vector<uint64_t>::iterator last = syncmers.begin() + ((j+1)*50000);
-					if (j == randstrobes.size() / 50000)
-						last = syncmers.end();
-					std::vector<uint64_t> subvec = std::vector<uint64_t>(first, last);
-					success = ixf.add_bin_elements(bin_nr++, subvec);
-//					std::cout << sp.name << "\t" << syncmers.size() << "\t" << bin_nr-1 << "/" << j << "\t" << subvec.size() << "\t" << success << std::endl;
-					if (!success)
-						break;
-				}
-				bin_meta.emplace_back(std::move(std::make_tuple(sp.name ,start_bin, bin_nr-1)));
-				if (++species_counter % 1000 == 0)
-				{
-					std::cout << species_counter << std::endl;
-				}
-					
-				if (!success)
-					break;
-			}
-
-			if (!success)
-			{
-				ixf.clear();
-				ixf.set_seed();
-				bin_nr = 0;
-				species_counter = 0;
-				bin_meta.clear();
-				break;
-			}
+			inpath /= "GCA";
 		}
+		else
+		{
+			inpath /= "GCF";
+		}
+		std::string infilename = species[index].accession_id + "_genomic.fna.gz";
+		inpath = inpath / species[index].accession_id.substr(4, 3) / species[index].accession_id.substr(7, 3) / species[index].accession_id.substr(10, 3) / infilename;
+		std::vector<Seqs> ref_seqs{};
+		parse_ref_seqs(ref_seqs, inpath);
+					
+		
+		for (const auto & ref_s : ref_seqs)
+		{
+			std::vector<uint64_t> strobe_hashes = seq_to_syncmers(kmer_size, ref_s.seq, sync_size, t_syncmer);
+			//randstrobes.insert(randstrobes.end(), strobe_hashes.begin(), strobe_hashes.end());
+			//randstrobes.insert(randstrobes.end(),std::make_move_iterator(strobe_hashes.begin()), std::make_move_iterator(strobe_hashes.end()));
+			syncmers.insert(std::make_move_iterator(strobe_hashes.begin()), std::make_move_iterator(strobe_hashes.end()));
+		}
+		
+		
+		sp_index_bins.push_back(std::move(std::make_pair(index, (syncmers.size() / 100000) + 1)));
+		syncmers.clear();
+	}
+	return sp_index_bins;
 
-		if (success)
-			break;
-				
+ }
+
+std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> compute_bin_numbers(std::vector<Species>& species, const std::string& gtdb_root, 
+										  int kmer_size, int sync_size, int t_syncmer)
+{
+	std::vector<std::future<std::vector<std::pair<uint64_t, uint64_t>>>> future_store{};
+	Semaphore max_threads(6);
+
+	uint16_t species_batches = (species.size() / 100) + 1;
+
+	for (uint16_t batch = 0; batch < species_batches; ++batch)
+	{
+//		std::vector<Species> sp_batch = std::vector(species.begin() + (batch*100), species.begin() + ((batch+1)*100));
+
+		future_store.push_back(std::async(std::launch::async,
+               [](const std::vector<Species>& species_vec, Semaphore& maxJobs, uint64_t start_species, uint64_t end_species,
+ 				const std::string& gtdb_root, int kmer_size, int sync_size, int t_syncmer)
+				{
+                	 std::scoped_lock w(maxJobs);
+                 	return compute_bin_number_per_species_batch(std::ref(species_vec), start_species, end_species,
+				  		std::ref(gtdb_root), kmer_size, sync_size, t_syncmer);
+               	}, std::ref(species), std::ref(max_threads), batch*100, ((batch+1)*100),
+				  std::ref(gtdb_root), kmer_size, sync_size, t_syncmer)
+        );
+		
 	}
 
-	write_meta_file(bin_meta, bin_meta_file);
+	std::vector<std::pair<uint64_t, uint64_t>> finished_batches{};
+	while (finished_batches.size() < future_store.size())
+	{
+		for (auto &future : future_store) 
+		{
+			std::vector<std::pair<uint64_t, uint64_t>> tmp = future.get();
+            finished_batches.insert(finished_batches.end(), tmp.begin(), tmp.end());
+        }
+	}
+
+	std::cout << "All threads finished" << std::endl;
+
+	uint64_t bin_nr = 0;
+	
+	uint64_t cum_bin_nr = 0;
+	uint16_t f_index = 0;
+	uint64_t first_species = 0;
+	uint64_t species_counter = 0;
+	// <bins in filter, start_species, end_species>
+	std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> filter_bins;
+	for(auto& result : finished_batches) 
+	{
+		
+		if ((bin_nr + result.second) > max_bins_per_filter)
+		{
+			filter_bins.push_back(std::make_tuple(bin_nr, first_species, species_counter));
+			std::cout << f_index++ << "\t" << bin_nr << "\t" << cum_bin_nr << std::endl;
+			species[result.first].filter_index = f_index;
+			species[result.first].first_bin = 0;
+			bin_nr = result.second;
+			species[result.first].last_bin = bin_nr - 1;
+			first_species = species_counter + 1;
+		}
+		else
+		{
+			species[result.first].filter_index = f_index;
+			species[result.first].first_bin = bin_nr;
+			bin_nr+= result.second;
+			species[result.first].last_bin = bin_nr - 1;
+		}
+		cum_bin_nr += result.second;
+		species_counter++;
+	}
+	
+	if (bin_nr > 0)
+	{
+		filter_bins.push_back(std::make_tuple(bin_nr,first_species, species_counter-1));
+		std::cout << f_index++ << "\t" << bin_nr << "\t" << cum_bin_nr << std::endl;
+	}
+	double mbytes = (double) (cum_bin_nr * 100000 * 1.23 * 8) / (double) 8388608;
+	std::cout << "Expected size of multi-IXF: " << mbytes << " MBytes" << std::endl;
+	
+	return filter_bins;
+}
+
+
+std::pair<uint16_t, bool> add_species_to_filter(std::vector<Species>& species_vec, const uint64_t start_species_index,
+ 						   const uint64_t end_species_index, const std::string& gtdb_root, int kmer_size,
+						   int sync_size, int t_syncmer, std::mutex& filter_mutex, 
+						   seqan3::interleaved_xor_filter<>& ixf,
+						   uint16_t filter_index, bool* terminate)
+{
+	bool success = true;
+	uint64_t bin = 0;
+	filter_mutex.lock();
+	std::cout << filter_index << "\t" << start_species_index << "\t" << end_species_index << std::endl;
+	filter_mutex.unlock();
+	std::set<uint64_t> syncmers{};
+	for (uint64_t spec = start_species_index; spec < species_vec.size() && spec < end_species_index; ++spec)
+	{
+		if (filter_index == 0)
+			std::cout << filter_index << "\t" << spec << "\t" << species_vec[spec].name <<std::endl;
+		auto inpath = std::filesystem::path(gtdb_root) / "gtdb_genomes_reps_r202";
+		if (species_vec[spec].accession_id.substr(0, 3).compare("GCA") == 0)
+		{
+			inpath /= "GCA";
+		}
+		else
+		{
+			inpath /= "GCF";
+		}
+		std::string infilename = species_vec[spec].accession_id + "_genomic.fna.gz";
+		inpath = inpath / species_vec[spec].accession_id.substr(4, 3) / species_vec[spec].accession_id.substr(7, 3) / 
+				species_vec[spec].accession_id.substr(10, 3) / infilename;
+
+		std::vector<Seqs> ref_seqs{};
+		parse_ref_seqs(ref_seqs, inpath);
+
+		// hier würfeln wir nur die hashes wild durcheinander durch das einfügen in ein ordered set
+		// anschließend teilen wir auch noch die Menge auf
+		// wenn wir aufteilen müssen wir di order beibehalten	
+		//std::vector<uint64_t> randstrobes{};
+		for (const auto & ref_s : ref_seqs)
+		{
+			std::vector<uint64_t> strobe_hashes = seq_to_syncmers(kmer_size, ref_s.seq, sync_size, t_syncmer);
+			syncmers.insert(std::make_move_iterator(strobe_hashes.begin()), std::make_move_iterator(strobe_hashes.end()));
+		}
+
+		std::vector<uint64_t> sync_vec(syncmers.begin(), syncmers.end());
+		
+		if (spec == 306)
+			std::cout << syncmers.size() << std::endl;
+		uint64_t first_species_bin = bin;
+		for (int j = 0; j < (syncmers.size() / 100000) + 1 ; j++)
+		{
+
+			std::vector<uint64_t>::iterator first = sync_vec.begin() + (j*100000);
+			std::vector<uint64_t>::iterator last = sync_vec.begin() + ((j+1)*100000);
+			if (j == syncmers.size() / 100000)
+				last = sync_vec.end();
+			std::vector<uint64_t> subvec = std::vector<uint64_t>(first, last);
+			
+			success = ixf.add_bin_elements(bin++, subvec);
+			if (filter_index == 0)
+			{
+				filter_mutex.lock();
+				std::cout << bin << "/" << ixf.bin_count() << "\t" << (syncmers.size() / 100000) + 1 << "\t" << success << std::endl;
+				filter_mutex.unlock();
+			}
+//			std::cout << species.name << "\t" << syncmers.size() << "\t" << bin-1 << "/" << j << "\t" << subvec.size() << "\t" << success << std::endl;
+//			filter_mutex.unlock();
+			if (!success)
+				break;
+		}
+		syncmers.clear();
+		sync_vec.clear();
+		
+		if (!success)
+			break;
+
+		filter_mutex.lock();
+		//bin_meta.emplace_back(std::move(std::make_tuple(species.name, filter_index, first_species_bin, bin-1)));
+		species_vec[spec].filter_index = filter_index;
+		species_vec[spec].first_bin = first_species_bin;
+		species_vec[spec].last_bin = bin-1;
+		filter_mutex.unlock();
+
+	}
+	std::cout << filter_index << "\tBins added to IXF" << std::endl;
+	return std::make_pair(filter_index, success);
+}
+
+multi_interleaved_xor_filter build_ixf_index(std::vector<Species>& species, const std::string& filter_file, const std::filesystem::path& bin_meta_file,
+                     const std::string& gtdb_root, int kmer_size, int sync_size, int t_syncmer)
+{	
+	//<number of bins, first_species_index, last_species_index>
+    std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> filter_bins = compute_bin_numbers(std::ref(species), gtdb_root,
+																			kmer_size, sync_size, t_syncmer);
+	std::cout << "bins computed" << std::endl;
+	multi_interleaved_xor_filter mixf{};
+//	return mixf;
+	uint16_t f_index = 0;
+	for (auto & fb : filter_bins)
+	{
+		mixf.add_filter(f_index, std::get<0>(fb), 100000);
+		++f_index;
+	}
+	
+	
+	Semaphore max_threads(6);
+	std::mutex filter_mutex{};
+	bool* terminate = new bool(false);
+	
+	uint64_t species_counter = 0;
+	std::vector<bool> finished_filter(filter_bins.size());
+	std::fill(finished_filter.begin(), finished_filter.end(), false);
+	// repeat until all IXFs have been successfully created
+	
+	std::queue<std::future<std::pair<uint16_t, bool>>> future_store{};
+	// create one thread per filter to add the maximum number of species to the filter
+	for (f_index = 0; f_index < filter_bins.size(); ++f_index)
+	{
+		// don't re-build filter if it already has been created successfully in former iteration round
+		future_store.push(std::async(std::launch::async,
+            	[](std::vector<Species>& species_vec, Semaphore& maxJobs, const uint64_t start_species_index,
+ 					   const uint64_t end_species_index, const std::string& gtdb_root, int kmer_size, int sync_size, int t_syncmer,
+						   std::mutex& filter_mutex, seqan3::interleaved_xor_filter<>& ixf,
+						   uint16_t filter_index, bool* terminate){
+                 			std::scoped_lock w(maxJobs);
+                 			return add_species_to_filter(std::ref(species_vec), start_species_index, end_species_index, gtdb_root, kmer_size, sync_size, t_syncmer,
+						   					filter_mutex, ixf, filter_index, terminate);
+               		}, std::ref(species), std::ref(max_threads), std::get<1>(filter_bins[f_index]), 
+					   std::get<2>(filter_bins[f_index]), std::ref(gtdb_root), kmer_size, sync_size, t_syncmer, std::ref(filter_mutex), 
+					   std::ref(mixf.get(f_index)), f_index, terminate)
+        );
+	}
+		
+	uint64_t filter_counter = 0;
+	bool success = true;
+	int reset_seed = 0;
+	// check which IXFs have been created successfully and which not
+	while(!future_store.empty())
+	{
+		auto & future = future_store.front();
+		std::pair<uint16_t, bool> result = future.get();
+		finished_filter[result.first] = result.second;
+		if (result.second)
+		{
+			std::cout << ++filter_counter << std::endl;
+		}
+		else
+		{
+			mixf.get(result.first).clear();
+			mixf.get(result.first).set_seed();
+			++reset_seed;
+			f_index = result.first;
+			future_store.push(std::async(std::launch::async,
+            	[](std::vector<Species>& species_vec, Semaphore& maxJobs, const uint64_t start_species_index,
+ 					   const uint64_t end_species_index, const std::string& gtdb_root, int kmer_size, int sync_size, int t_syncmer,
+						   std::mutex& filter_mutex, seqan3::interleaved_xor_filter<>& ixf,
+						   uint16_t filter_index, bool* terminate){
+                 			std::scoped_lock w(maxJobs);
+                 			return add_species_to_filter(std::ref(species_vec), start_species_index, end_species_index, gtdb_root, kmer_size, sync_size, t_syncmer,
+						   					filter_mutex, ixf, filter_index, terminate);
+               		}, std::ref(species), std::ref(max_threads), std::get<1>(filter_bins[f_index]), 
+					   std::get<2>(filter_bins[f_index]), std::ref(gtdb_root), kmer_size, sync_size, t_syncmer, std::ref(filter_mutex), 
+					   std::ref(mixf.get(f_index)), f_index, terminate)
+        	);
+				
+		}
+		future_store.pop();
+	}
+	
+	std::cout << "Reset seed : " << reset_seed << std::endl;	
+	mixf.species_vector = std::move(species);	
+
     std::ofstream os( filter_file, std::ios::binary );
     cereal::BinaryOutputArchive archive( os );
-    archive( ixf ); 
+    archive( mixf ); 
+
+	return std::move(mixf);
+}
+
+multi_interleaved_xor_filter load_multi_ixf_index(const std::string& filter_file)
+{
+	multi_interleaved_xor_filter mixf{};
+	std::ifstream              is( filter_file, std::ios::binary );
+    cereal::BinaryInputArchive archive( is );
+    archive( mixf );
+	return std::move(mixf);
 }
 
 #endif
