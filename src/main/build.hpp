@@ -26,7 +26,7 @@ typedef std::map<std::string, std::vector<Species>> TGenMap;
 
 // has to be x % 100 = 0 
 uint64_t max_bins_per_filter = 4300;
-uint64_t breakpoint = 24000;
+uint64_t breakpoint = 22000;
 
 inline std::string get_seqid( std::string header )
 {
