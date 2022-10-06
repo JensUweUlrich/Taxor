@@ -40,6 +40,6 @@ endif()
 # add all subdirectories
 
 add_subdirectory(seqan)
-#add_subdirectory(boost)
+add_subdirectory(hixf)
 add_subdirectory(main)
 

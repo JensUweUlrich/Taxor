@@ -30,6 +30,18 @@ ExternalProject_Add(zlib
         -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/zlib
 )
 
+ExternalProject_Add(lemon
+  PREFIX lemon
+  GIT_REPOSITORY    https://github.com/seqan/lemon.git
+  GIT_TAG           master
+  SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/lemon"
+  CMAKE_CACHE_ARGS
+        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/lemon
+  CONFIGURE_COMMAND	""
+  BUILD_COMMAND		""
+  INSTALL_COMMAND	""
+)
+
 ExternalProject_Add(seqan3
   GIT_REPOSITORY    https://github.com/JensUweUlrich/seqan3.git
   GIT_TAG           v3.1.0

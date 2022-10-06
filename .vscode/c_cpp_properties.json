@@ -1,0 +1,43 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/include/**",
+                "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/sdsl-lite/include/**",
+                "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/range-v3/include/**",
+                "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/cereal/include/**",
+                "/home/jens/software/PoreClassify/build/seqan/lemon/include/**"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c11",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "linux-gcc-x64",
+            "browse": {
+                "path": [
+                    "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/include",
+                    "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/sdsl-lite/include",
+                    "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/range-v3/include",
+                    "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/cereal/include",
+                    "/home/jens/software/PoreClassify/build/seqan/lemon/include"
+                ]
+            },
+            "mergeConfigurations": false,
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json"
+        },
+        {
+            "name": "PoreClassify",
+            "includePath": [
+                "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/include/**"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64",
+            "mergeConfigurations": true
+        }
+    ],
+    "version": 4
+}
