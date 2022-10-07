@@ -1,16 +1,10 @@
-// --------------------------------------------------------------------------------------------------
-// Copyright (c) 2006-2022, Knut Reinert & Freie Universität Berlin
-// Copyright (c) 2016-2022, Knut Reinert & MPI für molekulare Genetik
-// This file may be used, modified and/or redistributed under the terms of the 3-clause BSD-License
-// shipped with this file and also available at: https://github.com/seqan/raptor/blob/main/LICENSE.md
-// --------------------------------------------------------------------------------------------------
 
 #include <ranges>
 #include <seqan3/std/charconv>
 
-#include <raptor/build/hibf/parse_chopper_pack_line.hpp>
+#include "parse_chopper_pack_line.hpp"
 
-namespace raptor::hibf
+namespace hixf
 {
 
 chopper_pack_record parse_chopper_pack_line(std::string const & current_line)
@@ -53,4 +47,4 @@ chopper_pack_record parse_chopper_pack_line(std::string const & current_line)
     return result;
 }
 
-} // namespace raptor::hibf
+}

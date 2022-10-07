@@ -53,3 +53,12 @@ ExternalProject_Add(seqan3
   INSTALL_COMMAND	""
   DEPENDS zlib
 )
+
+ExternalProject_Add(chopper
+  PREFIX chopper
+  GIT_REPOSITORY    https://github.com/seqan/chopper.git
+  GIT_TAG           master
+  SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/chopper"
+  CMAKE_CACHE_ARGS
+        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/chopper
+)

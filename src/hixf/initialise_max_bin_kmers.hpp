@@ -7,20 +7,20 @@
 
 #pragma once
 
-#include <robin_hood.h>
+#include "robin_hood.h"
 
-#include <raptor/argument_parsing/build_arguments.hpp>
-#include <raptor/build/hibf/build_data.hpp>
+#include "build_arguments.hpp"
+#include "build_data.hpp"
 
-namespace raptor::hibf
+namespace hixf
 {
 
-template <seqan3::data_layout data_layout_mode>
+//template <seqan3::data_layout data_layout_mode>
 size_t initialise_max_bin_kmers(robin_hood::unordered_flat_set<size_t> & kmers,
                                 std::vector<int64_t> & ibf_positions,
                                 std::vector<int64_t> & filename_indices,
                                 lemon::ListDigraph::Node const & node,
-                                build_data<data_layout_mode> & data,
+                                build_data & data,
                                 build_arguments const & arguments);
 
-} // namespace raptor::hibf
+} 

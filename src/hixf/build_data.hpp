@@ -1,10 +1,3 @@
-// --------------------------------------------------------------------------------------------------
-// Copyright (c) 2006-2022, Knut Reinert & Freie Universität Berlin
-// Copyright (c) 2016-2022, Knut Reinert & MPI für molekulare Genetik
-// This file may be used, modified and/or redistributed under the terms of the 3-clause BSD-License
-// shipped with this file and also available at: https://github.com/seqan/raptor/blob/main/LICENSE.md
-// --------------------------------------------------------------------------------------------------
-
 #pragma once
 
 #include <atomic>
@@ -46,7 +39,7 @@ struct build_data
         hixf.ixf_vector.resize(number_of_ixfs);
         hixf.user_bins.set_ixf_count(number_of_ixfs);
         hixf.user_bins.set_user_bin_count(number_of_user_bins);
-        hixf.next_ibf_id.resize(number_of_ixfs);
+        hixf.next_ixf_id.resize(number_of_ixfs);
     }
 
     void compute_fp_correction(size_t const tmax, size_t const hash, double const fpr)
@@ -64,4 +57,4 @@ struct build_data
     }
 };
 
-} // namespace raptor::hibf
+} 

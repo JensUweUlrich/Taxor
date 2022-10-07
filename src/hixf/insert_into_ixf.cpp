@@ -1,30 +1,25 @@
-// --------------------------------------------------------------------------------------------------
-// Copyright (c) 2006-2022, Knut Reinert & Freie Universität Berlin
-// Copyright (c) 2016-2022, Knut Reinert & MPI für molekulare Genetik
-// This file may be used, modified and/or redistributed under the terms of the 3-clause BSD-License
-// shipped with this file and also available at: https://github.com/seqan/raptor/blob/main/LICENSE.md
-// --------------------------------------------------------------------------------------------------
 
 #include <seqan3/search/views/minimiser_hash.hpp>
 
-#include <raptor/adjust_seed.hpp>
-#include <raptor/build/hibf/insert_into_ibf.hpp>
-#include <raptor/dna4_traits.hpp>
+#include "adjust_seed.hpp"
+#include "insert_into_ixf.hpp"
+#include "dna4_traits.hpp"
 
-namespace raptor::hibf
+namespace hixf
 {
 
 // automatically does naive splitting if number_of_bins > 1
-void insert_into_ibf(robin_hood::unordered_flat_set<size_t> & parent_kmers,
+void insert_into_ixf(robin_hood::unordered_flat_set<size_t> & parent_kmers,
                      robin_hood::unordered_flat_set<size_t> const & kmers,
                      size_t const number_of_bins,
                      size_t const bin_index,
-                     seqan3::interleaved_bloom_filter<> & ibf,
+                     seqan3::interleaved_xor_filter<> & ixf,
                      bool is_root)
 {
     size_t const chunk_size = kmers.size() / number_of_bins + 1;
     size_t chunk_number{};
-
+    // TODO : give all hashed kmers/syncmers/minimizer to given xor filter
+/*
     for (auto chunk : kmers | seqan3::views::chunk(chunk_size))
     {
         assert(chunk_number < number_of_bins);
@@ -32,20 +27,21 @@ void insert_into_ibf(robin_hood::unordered_flat_set<size_t> & parent_kmers,
         ++chunk_number;
         for (size_t const value : chunk)
         {
-            ibf.emplace(value, bin_idx);
+            ixf.emplace(value, bin_idx);
             if (!is_root)
                 parent_kmers.insert(value);
         }
     }
+    */
 }
 
 void insert_into_ibf(build_arguments const & arguments,
                      chopper_pack_record const & record,
-                     seqan3::interleaved_bloom_filter<> & ibf)
+                     seqan3::interleaved_xor_filter<> & ixf)
 {
-    auto const bin_index = seqan3::bin_index{static_cast<size_t>(record.bin_indices.back())};
-
-    if (arguments.is_minimiser)
+    //auto const bin_index = seqan3::bin_index{static_cast<size_t>(record.bin_indices.back())};
+    // TODO: same here as above
+/*    if (arguments.is_minimiser)
     {
         uint64_t minimiser_value{};
         for (auto const & filename : record.filenames)
@@ -69,6 +65,7 @@ void insert_into_ibf(build_arguments const & arguments,
                 for (auto hash : seq | hash_view)
                     ibf.emplace(hash, bin_index);
     }
+    */
 }
 
-} // namespace raptor::hibf
+} 

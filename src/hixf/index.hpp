@@ -1,36 +1,30 @@
-// --------------------------------------------------------------------------------------------------
-// Copyright (c) 2006-2022, Knut Reinert & Freie Universität Berlin
-// Copyright (c) 2016-2022, Knut Reinert & MPI für molekulare Genetik
-// This file may be used, modified and/or redistributed under the terms of the 3-clause BSD-License
-// shipped with this file and also available at: https://github.com/seqan/raptor/blob/main/LICENSE.md
-// --------------------------------------------------------------------------------------------------
 
 #pragma once
 
 //#include <sharg/exceptions.hpp>
 
 #include "build_arguments.hpp"
-#include "hierarchical_interleaved_bloom_filter.hpp"
+#include "hierarchical_interleaved_xor_filter.hpp"
 #include "strong_types.hpp"
 
-namespace raptor
+namespace hixf
 {
 
 namespace index_structure
 {
 
-using ibf = seqan3::interleaved_bloom_filter<seqan3::data_layout::uncompressed>;
-using ibf_compressed = seqan3::interleaved_bloom_filter<seqan3::data_layout::compressed>;
-using hibf = hierarchical_interleaved_bloom_filter<seqan3::data_layout::uncompressed>;
-using hibf_compressed = hierarchical_interleaved_bloom_filter<seqan3::data_layout::compressed>;
+using ixf = seqan3::interleaved_xor_filter<>;
+//using ibf_compressed = seqan3::interleaved_bloom_filter<seqan3::data_layout::compressed>;
+using hixf = hierarchical_interleaved_xor_filter;
+//using hibf_compressed = hierarchical_interleaved_bloom_filter<seqan3::data_layout::compressed>;
 
-template <typename return_t, typename input_t>
+/*template <typename return_t, typename input_t>
 concept compressible_from = (std::same_as<return_t, ibf_compressed> && std::same_as<input_t, ibf>)
                          || (std::same_as<return_t, hibf_compressed> && std::same_as<input_t, hibf>);
-
+*/
 } // namespace index_structure
 
-template <typename data_t = index_structure::ibf>
+template <typename data_t = index_structure::ixf>
 class raptor_index
 {
 private:
@@ -42,10 +36,10 @@ private:
     uint8_t parts_{};
     bool compressed_{};
     std::vector<std::vector<std::string>> bin_path_{};
-    data_t ibf_{};
+    data_t ixf_{};
 
 public:
-    static constexpr seqan3::data_layout data_layout_mode = data_t::data_layout_mode;
+    //static constexpr seqan3::data_layout data_layout_mode = data_t::data_layout_mode;
     static constexpr uint32_t version{1u};
 
     raptor_index() = default;
@@ -60,13 +54,13 @@ public:
                           uint8_t const parts,
                           bool const compressed,
                           std::vector<std::vector<std::string>> const & bin_path,
-                          data_t && ibf) :
+                          data_t && ixf) :
         window_size_{window_size.v},
         shape_{shape},
         parts_{parts},
         compressed_{compressed},
         bin_path_{bin_path},
-        ibf_{std::move(ibf)}
+        ixf_{std::move(ixf)}
     {}
 
     explicit raptor_index(build_arguments const & arguments) :
@@ -75,9 +69,7 @@ public:
         parts_{arguments.parts},
         compressed_{arguments.compressed},
         bin_path_{arguments.bin_path},
-        ibf_{seqan3::bin_count{arguments.bins},
-             seqan3::bin_size{arguments.bits / arguments.parts},
-             seqan3::hash_function_count{arguments.hash}}
+        ixf_{}
     {
         static_assert(data_layout_mode == seqan3::data_layout::uncompressed);
     }
@@ -103,7 +95,7 @@ public:
         parts_ = std::move(other.parts_);
         compressed_ = true;
         bin_path_ = std::move(other.bin_path_);
-        ibf_ = std::move(data_t{std::move(other.ibf_)});
+        ixf_ = std::move(data_t{std::move(other.ixf_)});
     }
 
     uint64_t window_size() const
@@ -131,14 +123,14 @@ public:
         return bin_path_;
     }
 
-    data_t & ibf()
+    data_t & ixf()
     {
-        return ibf_;
+        return ixf_;
     }
 
-    data_t const & ibf() const
+    data_t const & ixf() const
     {
-        return ibf_;
+        return ixf_;
     }
 
     /*!\cond DEV
@@ -167,7 +159,7 @@ public:
                     throw sharg::parser_error{"Data layouts of serialised and specified index differ."};
                 }*/
                 archive(bin_path_);
-                archive(ibf_);
+                archive(ixf_);
             }
             catch (std::exception const & e)
             {
@@ -217,4 +209,4 @@ public:
     //!\endcond
 };
 
-} // namespace raptor
+} 

@@ -7,7 +7,8 @@
                 "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/sdsl-lite/include/**",
                 "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/range-v3/include/**",
                 "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/cereal/include/**",
-                "/home/jens/software/PoreClassify/build/seqan/lemon/include/**"
+                "/home/jens/software/PoreClassify/build/seqan/lemon/include/**",
+                "/home/jens/software/PoreClassify/build/seqan/chopper/include/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++",
@@ -20,7 +21,8 @@
                     "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/sdsl-lite/include",
                     "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/range-v3/include",
                     "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/cereal/include",
-                    "/home/jens/software/PoreClassify/build/seqan/lemon/include"
+                    "/home/jens/software/PoreClassify/build/seqan/lemon/include",
+                    "/home/jens/software/PoreClassify/build/seqan/chopper/include"
                 ]
             },
             "mergeConfigurations": false,

@@ -27,16 +27,16 @@ seqan3::interleaved_xor_filter<> construct_ixf(robin_hood::unordered_flat_set<si
 
     size_t const kmers_per_bin{static_cast<size_t>(std::ceil(static_cast<double>(kmers.size()) / number_of_bins))};
     double const bin_bits{static_cast<double>(bin_size_in_bits(arguments, kmers_per_bin))};
-    seqan3::bin_size const bin_size{static_cast<size_t>(std::ceil(bin_bits * data.fp_correction[number_of_bins]))};
-    seqan3::bin_count const bin_count{node_data.number_of_technical_bins};
-    seqan3::interleaved_xor_filter<> ixf{bin_count, bin_size, seqan3::hash_function_count{arguments.hash}};
+    //seqan3::bin_size const bin_size{static_cast<size_t>(std::ceil(bin_bits * data.fp_correction[number_of_bins]))};
+    //seqan3::bin_count const bin_count{node_data.number_of_technical_bins};
+    seqan3::interleaved_xor_filter<> ixf{};
 
-    insert_into_ibf(parent_kmers, kmers, number_of_bins, node_data.max_bin_index, ibf, is_root);
+    insert_into_ixf(parent_kmers, kmers, number_of_bins, node_data.max_bin_index, ixf, is_root);
 
-    return ibf;
+    return ixf;
 }
 
-template seqan3::interleaved_bloom_filter<>
+/*template seqan3::interleaved_bloom_filter<>
 construct_ibf<seqan3::data_layout::uncompressed>(robin_hood::unordered_flat_set<size_t> &,
                                                  robin_hood::unordered_flat_set<size_t> &,
                                                  size_t const,
@@ -53,5 +53,5 @@ construct_ibf<seqan3::data_layout::compressed>(robin_hood::unordered_flat_set<si
                                                build_data<seqan3::data_layout::compressed> &,
                                                build_arguments const &,
                                                bool);
-
-} // namespace raptor::hibf
+*/
+} 

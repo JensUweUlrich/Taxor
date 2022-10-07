@@ -302,12 +302,6 @@ static inline void make_string_to_hashvalues_open_syncmers_canonical(const seqan
                     }
                     gap ++;
                 }
-//                if (gap > 25){
-//                    std::cout <<  "Gap: " << gap << " position:" << i - k + 1 << std::endl;
-//                    if (gap < 500 ) {
-//                        std::cout << seq.substr(i - k + 1 - gap + 1, gap +k) << std::endl;
-//                    }
-//                }
             }
         } else {
             qs_min_val = UINT64_MAX;
@@ -318,11 +312,6 @@ static inline void make_string_to_hashvalues_open_syncmers_canonical(const seqan
             qs_pos.clear();
         }
     }
-//    std::cout << hash_count << " values produced from string of length " <<   seq_length << std::endl;
-//    for(auto t: pos_to_seq_choord){
-//        std::cout << t << " ";
-//    }
-//    std::cout << " " << std::endl;
 }
 
 
@@ -417,11 +406,6 @@ std::vector<uint64_t> seq_to_syncmers(int k, const seqan3::dna5_vector &seq, int
 {
     std::vector<uint64_t> randstrobes;
 
-/*    if (seq.size() < w_max) 
-    {
-        return randstrobes;
-    }
-*/
     //std::transform(seq.begin(), seq.end(), seq.begin(), ::toupper);
     uint64_t kmask=(1ULL<<2*k) - 1;
 
@@ -432,53 +416,7 @@ std::vector<uint64_t> seq_to_syncmers(int k, const seqan3::dna5_vector &seq, int
     uint64_t smask=(1ULL<<(2*s)) - 1;
     make_string_to_hashvalues_open_syncmers_canonical(seq, string_hashes, pos_to_seq_choord, kmask, k, smask, s, t);
     return string_hashes;
-    /*
-    unsigned int nr_hashes = string_hashes.size();
-    if (nr_hashes == 0) 
-    {
-        return randstrobes;
-    }
-
-    // create the randstrobes
-    for (unsigned int i = 0; i <= nr_hashes; i++) 
-    {
-        unsigned int strobe_pos_next;
-        uint64_t strobe_hashval_next;
-        unsigned int seq_pos_strobe1 = pos_to_seq_choord[i];
-        unsigned int seq_end = seq_pos_strobe1 + max_dist;
-
-        if (i + w_max < nr_hashes)
-        {
-            unsigned int w_start = i+w_min;
-            unsigned int w_end = i+w_max;
-            uint64_t strobe_hash = string_hashes[i];
-            get_next_strobe_dist_constraint(string_hashes, pos_to_seq_choord, strobe_hash, strobe_pos_next, 
-                                            strobe_hashval_next, w_start, w_end, q, seq_pos_strobe1, seq_end,i);
-
-        }
-        else if ((i + w_min + 1 < nr_hashes) && (nr_hashes <= i + w_max) )
-        {
-            unsigned int w_start = i+w_min;
-            unsigned int w_end = nr_hashes - 1;
-            uint64_t strobe_hash = string_hashes[i];
-            get_next_strobe_dist_constraint(string_hashes, pos_to_seq_choord, strobe_hash, strobe_pos_next, 
-                                            strobe_hashval_next, w_start, w_end, q, seq_pos_strobe1, seq_end, i);
-
-        }
-        else
-        {
-            return randstrobes;
-        }
-
-
-        uint64_t hash_randstrobe2 = (string_hashes[i]) + (strobe_hashval_next);
-
-        randstrobes.push_back(hash_randstrobe2);
-
-    }
-
-    return randstrobes;
-    */
+    
 }
 
 read_hash_vector seq_to_randstrobes_read(int k, int w_min, int w_max, const seqan3::dna5_vector &seq, 

@@ -108,17 +108,18 @@ public:
      * If `j != i` is returned, there is a lower level IBF, bin `b` is a merged bin, and `j` is the ID of the lower
      * level IBF in ibf_vector.
      */
-    std::vector<std::vector<int64_t>> next_ibf_id;
+    std::vector<std::vector<int64_t>> next_ixf_id;
 
     //!\brief The underlying user bins.
     user_bins user_bins;
 
     //!\brief Returns a membership_agent to be used for counting.
+    template <std::integral value_t = uint8_t>
     membership_agent membership_agent() const
     {
         return typename hierarchical_interleaved_xor_filter::membership_agent{*this};
     }
-
+   
 
     /*!\brief Returns a counting_agent_type to be used for counting.
      * \tparam value_t The type to use for the counters; must model std::integral.
@@ -150,6 +151,7 @@ public:
 /*!\brief Bookkeeping for user and technical bins.
  */
 //template <seqan3::data_layout data_layout_mode>
+template <std::integral value_t>
 class hierarchical_interleaved_xor_filter::user_bins
 {
 private:
@@ -267,7 +269,8 @@ public:
  * \details
  * In contrast to the [seqan3::interleaved_bloom_filter][1], the result will consist of indices of user bins.
  */
-//template <seqan3::data_layout data_layout_mode> // TODO: value_t as template?
+// TODO: value_t as template?
+template <std::integral value_t>
 class hierarchical_interleaved_xor_filter::membership_agent
 {
 private:
@@ -382,16 +385,16 @@ class hierarchical_interleaved_xor_filter::counting_agent_type
 {
 private:
     //!\brief The type of the augmented hierarchical_interleaved_bloom_filter.
-    using hibf_t = hierarchical_interleaved_bloom_filter<data_layout_mode>;
+    using hixf_t = hierarchical_interleaved_xor_filter<>;
 
     //!\brief A pointer to the augmented hierarchical_interleaved_bloom_filter.
-    hibf_t const * const hibf_ptr{nullptr};
+    hixf_t const * const hixf_ptr{nullptr};
 
     //!\brief Helper for recursive bulk counting.
     template <std::ranges::forward_range value_range_t>
-    void bulk_count_impl(value_range_t && values, int64_t const ibf_idx, size_t const threshold)
+    void bulk_count_impl(value_range_t && values, int64_t const ixf_idx, size_t const threshold)
     {
-        auto agent = hibf_ptr->ibf_vector[ibf_idx].template counting_agent<value_t>();
+        auto agent = hixf_ptr->ixf_vector[ixf_idx].template counting_agent<value_t>();
         auto & result = agent.bulk_count(values);
 
         value_t sum{};
@@ -399,16 +402,16 @@ private:
         for (size_t bin{}; bin < result.size(); ++bin)
         {
             sum += result[bin];
-            auto const current_filename_index = hibf_ptr->user_bins.filename_index(ibf_idx, bin);
+            auto const current_filename_index = hixf_ptr->user_bins.filename_index(ixf_idx, bin);
 
             if (current_filename_index < 0) // merged bin
             {
                 if (sum >= threshold)
-                    bulk_count_impl(values, hibf_ptr->next_ibf_id[ibf_idx][bin], threshold);
+                    bulk_count_impl(values, hixf_ptr->next_ixf_id[ixf_idx][bin], threshold);
                 sum = 0u;
             }
             else if (bin + 1u == result.size() ||                                                    // last bin
-                     current_filename_index != hibf_ptr->user_bins.filename_index(ibf_idx, bin + 1)) // end of split bin
+                     current_filename_index != hixf_ptr->user_bins.filename_index(ixf_idx, bin + 1)) // end of split bin
             {
                 if (sum >= threshold)
                     result_buffer[current_filename_index] = sum;

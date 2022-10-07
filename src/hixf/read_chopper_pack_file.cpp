@@ -1,21 +1,15 @@
-// --------------------------------------------------------------------------------------------------
-// Copyright (c) 2006-2022, Knut Reinert & Freie Universität Berlin
-// Copyright (c) 2016-2022, Knut Reinert & MPI für molekulare Genetik
-// This file may be used, modified and/or redistributed under the terms of the 3-clause BSD-License
-// shipped with this file and also available at: https://github.com/seqan/raptor/blob/main/LICENSE.md
-// --------------------------------------------------------------------------------------------------
 
 #include <lemon/list_graph.h> /// Must be first include.
 
-#include <raptor/build/hibf/parse_chopper_pack_header.hpp>
-#include <raptor/build/hibf/parse_chopper_pack_line.hpp>
-#include <raptor/build/hibf/read_chopper_pack_file.hpp>
+#include "parse_chopper_pack_header.hpp"
+#include "parse_chopper_pack_line.hpp"
+#include "read_chopper_pack_file.hpp"
 
-namespace raptor::hibf
+namespace hixf
 {
 
-template <seqan3::data_layout data_layout_mode>
-void read_chopper_pack_file(build_data<data_layout_mode> & data, std::string const & chopper_pack_filename)
+//template <seqan3::data_layout data_layout_mode>
+void read_chopper_pack_file(build_data & data, std::string const & chopper_pack_filename)
 {
     std::ifstream chopper_pack_file{chopper_pack_filename};
 
@@ -24,7 +18,7 @@ void read_chopper_pack_file(build_data<data_layout_mode> & data, std::string con
 
     // parse header
     // -------------------------------------------------------------------------
-    data.number_of_ibfs = parse_chopper_pack_header(data.ibf_graph, data.node_map, chopper_pack_file) + 1;
+    data.number_of_ixfs = parse_chopper_pack_header(data.ixf_graph, data.node_map, chopper_pack_file) + 1;
 
     // parse lines
     // -------------------------------------------------------------------------
@@ -36,7 +30,7 @@ void read_chopper_pack_file(build_data<data_layout_mode> & data, std::string con
         chopper_pack_record const && record = parse_chopper_pack_line(current_line);
 
         // go down the tree until you find the matching parent
-        lemon::ListDigraph::Node current_node = data.ibf_graph.nodeFromId(0); // start at root
+        lemon::ListDigraph::Node current_node = data.ixf_graph.nodeFromId(0); // start at root
 
         for (size_t i = 0; i < record.bin_indices.size() - 1; ++i)
         {
@@ -50,9 +44,9 @@ void read_chopper_pack_file(build_data<data_layout_mode> & data, std::string con
 #ifndef NDEBUG
             bool found_next_node{false}; // sanity check
 #endif
-            for (lemon::ListDigraph::OutArcIt arc_it(data.ibf_graph, current_node); arc_it != lemon::INVALID; ++arc_it)
+            for (lemon::ListDigraph::OutArcIt arc_it(data.ixf_graph, current_node); arc_it != lemon::INVALID; ++arc_it)
             {
-                auto target = data.ibf_graph.target(arc_it);
+                auto target = data.ixf_graph.target(arc_it);
                 if (data.node_map[target].parent_bin_index == bin)
                 {
                     current_node = target;
@@ -81,11 +75,11 @@ void read_chopper_pack_file(build_data<data_layout_mode> & data, std::string con
     data.number_of_user_bins = user_bins;
     data.resize();
 }
-
+/*
 template void read_chopper_pack_file<seqan3::data_layout::uncompressed>(build_data<seqan3::data_layout::uncompressed> &,
                                                                         std::string const &);
 
 template void read_chopper_pack_file<seqan3::data_layout::compressed>(build_data<seqan3::data_layout::compressed> &,
                                                                       std::string const &);
-
-} // namespace raptor::hibf
+*/
+} 

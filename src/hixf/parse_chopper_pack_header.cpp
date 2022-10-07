@@ -1,9 +1,3 @@
-// --------------------------------------------------------------------------------------------------
-// Copyright (c) 2006-2022, Knut Reinert & Freie Universität Berlin
-// Copyright (c) 2016-2022, Knut Reinert & MPI für molekulare Genetik
-// This file may be used, modified and/or redistributed under the terms of the 3-clause BSD-License
-// shipped with this file and also available at: https://github.com/seqan/raptor/blob/main/LICENSE.md
-// --------------------------------------------------------------------------------------------------
 
 #include <algorithm>
 #include <cassert>
@@ -13,13 +7,13 @@
 
 #include <chopper/prefixes.hpp>
 
-#include <raptor/build/hibf/bin_prefixes.hpp>
-#include <raptor/build/hibf/parse_chopper_pack_header.hpp>
+#include "bin_prefixes.hpp"
+#include "parse_chopper_pack_header.hpp"
 
-namespace raptor::hibf
+namespace hixf
 {
 
-size_t parse_chopper_pack_header(lemon::ListDigraph & ibf_graph,
+size_t parse_chopper_pack_header(lemon::ListDigraph & ixf_graph,
                                  lemon::ListDigraph::NodeMap<node_data> & node_map,
                                  std::istream & chopper_pack_file)
 {
@@ -57,14 +51,14 @@ size_t parse_chopper_pack_header(lemon::ListDigraph & ibf_graph,
         ; // skip config in header
 
     assert(line[0] == '#');                                    // we are reading header lines
-    assert(line.substr(1, hibf_prefix.size()) == hibf_prefix); // first line should always be High level IBF
+    assert(line.substr(1, hixf_prefix.size()) == hixf_prefix); // first line should always be High level IBF
 
     // parse High Level max bin index
-    assert(line.substr(hibf_prefix.size() + 2, 11) == "max_bin_id:");
-    std::string_view const hibf_max_bin_str{line.begin() + 27, line.end()};
+    assert(line.substr(hixf_prefix.size() + 2, 11) == "max_bin_id:");
+    std::string_view const hixf_max_bin_str{line.begin() + 27, line.end()};
 
-    auto high_level_node = ibf_graph.addNode(); // high-level node = root node
-    node_map.set(high_level_node, {0, parse_first_bin(hibf_max_bin_str), 0, lemon::INVALID, {}});
+    auto high_level_node = ixf_graph.addNode(); // high-level node = root node
+    node_map.set(high_level_node, {0, parse_first_bin(hixf_max_bin_str), 0, lemon::INVALID, {}});
 
     std::vector<std::pair<std::vector<size_t>, size_t>> header_records{};
 
@@ -100,9 +94,9 @@ size_t parse_chopper_pack_header(lemon::ListDigraph & ibf_graph,
 
         while (it != (bin_indices.end() - 1))
         {
-            for (lemon::ListDigraph::OutArcIt arc_it(ibf_graph, current_node); arc_it != lemon::INVALID; ++arc_it)
+            for (lemon::ListDigraph::OutArcIt arc_it(ixf_graph, current_node); arc_it != lemon::INVALID; ++arc_it)
             {
-                auto target = ibf_graph.target(arc_it);
+                auto target = ixf_graph.target(arc_it);
                 if (node_map[target].parent_bin_index == *it)
                 {
                     current_node = target;
@@ -112,8 +106,8 @@ size_t parse_chopper_pack_header(lemon::ListDigraph & ibf_graph,
             ++it;
         }
 
-        auto new_node = ibf_graph.addNode();
-        ibf_graph.addArc(current_node, new_node);
+        auto new_node = ixf_graph.addNode();
+        ixf_graph.addArc(current_node, new_node);
         node_map.set(new_node, {bin_indices.back(), max_id, 0, lemon::INVALID, {}});
 
         if (node_map[current_node].max_bin_index == bin_indices.back())
@@ -123,4 +117,4 @@ size_t parse_chopper_pack_header(lemon::ListDigraph & ibf_graph,
     return header_records.size();
 }
 
-} // namespace raptor::hibf
+} 
