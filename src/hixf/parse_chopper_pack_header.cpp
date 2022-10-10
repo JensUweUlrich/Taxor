@@ -39,7 +39,9 @@ size_t parse_chopper_pack_header(lemon::ListDigraph & ixf_graph,
     auto parse_first_bin = [](std::string_view const & buffer)
     {
         size_t tmp{};
+        std::cout << buffer.size() << std::endl;
         std::from_chars(&buffer[0], &buffer[0] + buffer.size(), tmp);
+        std::cout << tmp << std::endl;
         return tmp;
     }; // GCOVR_EXCL_LINE
 
@@ -56,12 +58,13 @@ size_t parse_chopper_pack_header(lemon::ListDigraph & ixf_graph,
     // parse High Level max bin index
     assert(line.substr(hixf_prefix.size() + 2, 11) == "max_bin_id:");
     std::string_view const hixf_max_bin_str{line.begin() + 27, line.end()};
-
+    
     auto high_level_node = ixf_graph.addNode(); // high-level node = root node
+   
     node_map.set(high_level_node, {0, parse_first_bin(hixf_max_bin_str), 0, lemon::INVALID, {}});
-
+   
     std::vector<std::pair<std::vector<size_t>, size_t>> header_records{};
-
+    
     // first read and parse header records, in order to sort them before adding them to the graph
     while (std::getline(chopper_pack_file, line) && line.substr(0, 6) != "#FILES")
     {
@@ -77,7 +80,7 @@ size_t parse_chopper_pack_header(lemon::ListDigraph & ixf_graph,
 
         header_records.emplace_back(parse_bin_indices(indices_str), parse_first_bin(max_id_str));
     }
-
+    
     // sort records ascending by the number of bin indices (corresponds to the IBF levels)
     std::ranges::sort(header_records,
                       [](auto const & r, auto const & l)

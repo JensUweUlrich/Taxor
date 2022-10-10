@@ -13,9 +13,9 @@ namespace hixf
 namespace index_structure
 {
 
-using ixf = seqan3::interleaved_xor_filter<>;
+using ixf = seqan3::interleaved_xor_filter<uint8_t>;
 //using ibf_compressed = seqan3::interleaved_bloom_filter<seqan3::data_layout::compressed>;
-using hixf = hierarchical_interleaved_xor_filter;
+using hixf = hierarchical_interleaved_xor_filter<uint8_t>;
 //using hibf_compressed = hierarchical_interleaved_bloom_filter<seqan3::data_layout::compressed>;
 
 /*template <typename return_t, typename input_t>
@@ -71,25 +71,25 @@ public:
         bin_path_{arguments.bin_path},
         ixf_{}
     {
-        static_assert(data_layout_mode == seqan3::data_layout::uncompressed);
+        //static_assert(data_layout_mode == seqan3::data_layout::uncompressed);
     }
 
     template <typename other_data_t>
     explicit raptor_index(raptor_index<other_data_t> const & other)
     {
-        static_assert(index_structure::compressible_from<data_t, other_data_t>);
+        //static_assert(index_structure::compressible_from<data_t, other_data_t>);
         window_size_ = other.window_size_;
         shape_ = other.shape_;
         parts_ = other.parts_;
         compressed_ = true;
         bin_path_ = other.bin_path_;
-        ibf_ = data_t{other.ibf_};
+        ixf_ = data_t{other.ibf_};
     }
 
     template <typename other_data_t>
     explicit raptor_index(raptor_index<other_data_t> && other)
     {
-        static_assert(index_structure::compressible_from<data_t, other_data_t>);
+        //static_assert(index_structure::compressible_from<data_t, other_data_t>);
         window_size_ = std::move(other.window_size_);
         shape_ = std::move(other.shape_);
         parts_ = std::move(other.parts_);

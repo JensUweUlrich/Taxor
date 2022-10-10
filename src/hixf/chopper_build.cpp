@@ -14,12 +14,14 @@ void chopper_build(build_arguments const & arguments)
     build_data data{};
 
     create_ixfs_from_chopper_pack(data, arguments);
-
+    std::cout << data.number_of_ixfs << std::endl;
+	std::cout << data.number_of_user_bins << std::endl;
+    return;
     std::vector<std::vector<std::string>> bin_path{};
     for (size_t i{0}; i < data.hixf.user_bins.num_user_bins(); ++i)
         bin_path.push_back(std::vector<std::string>{data.hixf.user_bins.filename_of_user_bin(i)});
 
-    raptor_index<hierarchical_interleaved_xor_filter> index{window{arguments.window_size},
+    raptor_index<hierarchical_interleaved_xor_filter<uint8_t>> index{window{arguments.window_size},
                                                                                 arguments.shape,
                                                                                 arguments.parts,
                                                                                 arguments.compressed,

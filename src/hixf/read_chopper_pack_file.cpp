@@ -10,7 +10,8 @@ namespace hixf
 
 //template <seqan3::data_layout data_layout_mode>
 void read_chopper_pack_file(build_data & data, std::string const & chopper_pack_filename)
-{
+{   
+    
     std::ifstream chopper_pack_file{chopper_pack_filename};
 
     if (!chopper_pack_file.good() || !chopper_pack_file.is_open())
@@ -18,12 +19,14 @@ void read_chopper_pack_file(build_data & data, std::string const & chopper_pack_
 
     // parse header
     // -------------------------------------------------------------------------
+    
     data.number_of_ixfs = parse_chopper_pack_header(data.ixf_graph, data.node_map, chopper_pack_file) + 1;
 
     // parse lines
     // -------------------------------------------------------------------------
     std::string current_line;
     size_t user_bins{};
+   
     while (std::getline(chopper_pack_file, current_line))
     {
         ++user_bins;

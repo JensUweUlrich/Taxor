@@ -40,6 +40,7 @@ endif()
 # add all subdirectories
 
 add_subdirectory(seqan)
+add_subdirectory(hashing)
 add_subdirectory(hixf)
 add_subdirectory(main)
 

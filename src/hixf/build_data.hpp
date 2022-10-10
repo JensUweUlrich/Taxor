@@ -21,7 +21,7 @@ struct build_data
     lemon::ListDigraph ixf_graph{};
     lemon::ListDigraph::NodeMap<node_data> node_map{ixf_graph};
 
-    hierarchical_interleaved_xor_filter hixf{};
+    hierarchical_interleaved_xor_filter<uint8_t> hixf{};
     std::vector<double> fp_correction{};
 
     size_t request_ixf_idx()

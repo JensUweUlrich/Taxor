@@ -64,6 +64,10 @@ namespace hixf
  * [1]: https://docs.seqan.de/seqan/3.0.3/classseqan3_1_1interleaved__bloom__filter.html
  */
 //template <seqan3::data_layout data_layout_mode_ = seqan3::data_layout::uncompressed>
+template <typename FingerprintType = uint8_t>
+//!\cond
+        requires std::same_as<FingerprintType,uint8_t> || std::same_as<FingerprintType,uint16_t>
+//!\endcond
 class hierarchical_interleaved_xor_filter
 {
 public:
@@ -82,7 +86,7 @@ public:
     //static constexpr seqan3::data_layout data_layout_mode = data_layout_mode_;
 
     //!\brief The type of an individual Bloom filter.
-    using ixf_t = seqan3::interleaved_xor_filter<>;
+    using ixf_t = seqan3::interleaved_xor_filter<FingerprintType>;
 
     /*!\name Constructors, destructor and assignment
      * \{
@@ -114,7 +118,7 @@ public:
     user_bins user_bins;
 
     //!\brief Returns a membership_agent to be used for counting.
-    template <std::integral value_t = uint8_t>
+    //template <std::integral value_t = uint8_t>
     membership_agent membership_agent() const
     {
         return typename hierarchical_interleaved_xor_filter::membership_agent{*this};
@@ -151,8 +155,8 @@ public:
 /*!\brief Bookkeeping for user and technical bins.
  */
 //template <seqan3::data_layout data_layout_mode>
-template <std::integral value_t>
-class hierarchical_interleaved_xor_filter::user_bins
+template <typename FingerprintType>
+class hierarchical_interleaved_xor_filter<FingerprintType>::user_bins
 {
 private:
     //!\brief Contains filenames of all user bins.
@@ -167,6 +171,14 @@ private:
     std::vector<std::vector<int64_t>> ixf_bin_to_filename_position{};
 
 public:
+/*
+    user_bins() = default;                                              //!< Defaulted.
+    user_bins(user_bins const &) = default; //!< Defaulted.
+    user_bins &operator=(user_bins const &) = default;                        //!< Defaulted.
+    user_bins(user_bins &&) = default; //!< Defaulted.
+    user_bins &operator=(user_bins &&) = default; //!< Defaulted.
+    ~user_bins() = default;           
+*/
     //!\brief Returns the number of managed user bins.
     size_t num_user_bins() const noexcept
     {
@@ -270,12 +282,12 @@ public:
  * In contrast to the [seqan3::interleaved_bloom_filter][1], the result will consist of indices of user bins.
  */
 // TODO: value_t as template?
-template <std::integral value_t>
-class hierarchical_interleaved_xor_filter::membership_agent
+template <typename FingerprintType>
+class hierarchical_interleaved_xor_filter<FingerprintType>::membership_agent
 {
 private:
     //!\brief The type of the augmented hierarchical_interleaved_bloom_filter.
-    using hixf_t = hierarchical_interleaved_xor_filter;
+    using hixf_t = hierarchical_interleaved_xor_filter<FingerprintType>;
 
     //!\brief A pointer to the augmented hierarchical_interleaved_bloom_filter.
     hixf_t const * const hixf_ptr{nullptr};
@@ -380,12 +392,14 @@ public:
 /*!\brief Manages counting ranges of values for the hibf::hierarchical_interleaved_bloom_filter.
  */
 //template <seqan3::data_layout data_layout_mode>
+template <typename FingerprintType>
 template <std::integral value_t>
-class hierarchical_interleaved_xor_filter::counting_agent_type
+class hierarchical_interleaved_xor_filter<FingerprintType>::counting_agent_type
 {
 private:
     //!\brief The type of the augmented hierarchical_interleaved_bloom_filter.
-    using hixf_t = hierarchical_interleaved_xor_filter<>;
+    using hixf_t = hierarchical_interleaved_xor_filter<FingerprintType>;
+    typedef seqan3::interleaved_xor_filter<FingerprintType>::counting_agent_type TIXFAgent;
 
     //!\brief A pointer to the augmented hierarchical_interleaved_bloom_filter.
     hixf_t const * const hixf_ptr{nullptr};
@@ -442,7 +456,7 @@ public:
     //!\}
 
     //!\brief Stores the result of bulk_count().
-    seqan3::counting_vector<value_t> result_buffer;
+    TIXFAgent::counting_vector result_buffer;
 
     /*!\name Counting
      * \{
@@ -464,7 +478,7 @@ public:
      * hibf::hierarchical_interleaved_bloom_filter::counting_agent_type for each thread.
      */
     template <std::ranges::forward_range value_range_t>
-    [[nodiscard]] seqan3::counting_vector<value_t> const & bulk_count(value_range_t && values,
+    [[nodiscard]] TIXFAgent::counting_vector const & bulk_count(value_range_t && values,
                                                                       size_t const threshold = 1u) & noexcept
     {
         assert(hixf_ptr != nullptr);
@@ -485,7 +499,7 @@ public:
     // `bulk_count` cannot be called on a temporary, since the object the returned reference points to
     // is immediately destroyed.
     template <std::ranges::range value_range_t>
-    [[nodiscard]] seqan3::counting_vector<value_t> const & bulk_count(value_range_t && values,
+    [[nodiscard]] TIXFAgent::counting_vector const & bulk_count(value_range_t && values,
                                                                       size_t const threshold = 1u) && noexcept = delete;
     //!\}
 };

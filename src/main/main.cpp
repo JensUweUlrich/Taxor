@@ -25,6 +25,9 @@
 #include "index.hpp"
 #include "build.hpp"
 
+#include <chopper_build.hpp>
+#include <build_arguments.hpp>
+
 using namespace seqan3::literals;
 
 //std::string gtdb_root = "D:\\gtdb_genomes_reps_r202";
@@ -398,13 +401,17 @@ void bins_to_species(multi_interleaved_xor_filter& mixf, std::vector<std::vector
 	}
 }
 
-void bin_count_2_species_count(std::vector<TIXFAgent::counting_vector>& count_vectors, std::vector<std::vector<Species*>>)
-{
 
-}
 
 int main(int argc, char const **argv)
 {
+
+	hixf::build_arguments args{};
+	args.bin_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/binning.out"};
+	
+	hixf::chopper_build(args);
+
+	return 1;
 	uint64_t q_p = pow (2, 8) - 1;
 	int kmer_size = 16;
 	int sync_size = 4;

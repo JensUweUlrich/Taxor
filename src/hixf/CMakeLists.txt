@@ -16,7 +16,7 @@ target_include_directories (hixf PUBLIC
     ${CMAKE_CURRENT_BINARY_DIR}/../seqan/lemon/include 
     ${CMAKE_CURRENT_BINARY_DIR}/../seqan/chopper/include
     )
-target_link_libraries (hixf sdsl seqan3::seqan3)
+target_link_libraries (hixf seqan3::seqan3)
 
 #install(TARGETS IBF DESTINATION lib COMPONENT libraries)
 

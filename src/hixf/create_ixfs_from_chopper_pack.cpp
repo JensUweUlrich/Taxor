@@ -9,14 +9,15 @@ namespace hixf
 {
 
 //template <seqan3::data_layout data_layout_mode>
-void create_ibfs_from_chopper_pack(build_data& data, build_arguments const & arguments)
+void create_ixfs_from_chopper_pack(build_data& data, build_arguments const & arguments)
 {
     read_chopper_pack_file(data, arguments.bin_file);
     lemon::ListDigraph::Node root = data.ixf_graph.nodeFromId(0); // root node = high level IBF node
     robin_hood::unordered_flat_set<size_t> root_kmers{};
 
     size_t const t_max{data.node_map[root].number_of_technical_bins};
-    data.compute_fp_correction(t_max, arguments.hash, arguments.fpr);
+    std::cout << t_max << std::endl;
+    //data.compute_fp_correction(t_max, arguments.hash, arguments.fpr);
 
     hierarchical_build(root_kmers, root, data, arguments, true);
 }

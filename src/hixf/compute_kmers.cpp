@@ -1,17 +1,11 @@
-// --------------------------------------------------------------------------------------------------
-// Copyright (c) 2006-2022, Knut Reinert & Freie Universität Berlin
-// Copyright (c) 2016-2022, Knut Reinert & MPI für molekulare Genetik
-// This file may be used, modified and/or redistributed under the terms of the 3-clause BSD-License
-// shipped with this file and also available at: https://github.com/seqan/raptor/blob/main/LICENSE.md
-// --------------------------------------------------------------------------------------------------
 
 #include <seqan3/search/views/minimiser_hash.hpp>
 
-#include <raptor/adjust_seed.hpp>
-#include <raptor/build/hibf/compute_kmers.hpp>
-#include <raptor/dna4_traits.hpp>
+#include "adjust_seed.hpp"
+#include "compute_kmers.hpp"
+#include "dna4_traits.hpp"
 
-namespace raptor::hibf
+namespace hixf
 {
 
 void compute_kmers(robin_hood::unordered_flat_set<size_t> & kmers,
@@ -43,4 +37,4 @@ void compute_kmers(robin_hood::unordered_flat_set<size_t> & kmers,
     }
 }
 
-} // namespace raptor::hibf
+}
