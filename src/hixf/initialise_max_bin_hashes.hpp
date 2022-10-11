@@ -16,7 +16,7 @@ namespace hixf
 {
 
 //template <seqan3::data_layout data_layout_mode>
-size_t initialise_max_bin_kmers(robin_hood::unordered_flat_set<size_t> & kmers,
+size_t initialise_max_bin_hashes(robin_hood::unordered_flat_set<size_t> & kmers,
                                 std::vector<int64_t> & ibf_positions,
                                 std::vector<int64_t> & filename_indices,
                                 lemon::ListDigraph::Node const & node,

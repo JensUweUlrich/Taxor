@@ -506,16 +506,15 @@ int main(int argc, char const **argv)
 			continue;
 
 		// rhv holds hash vectors for forward and reverse complement
-		read_hash_vector rhv = seq_to_randstrobes_read(kmer_size, w_min, w_max, seq, sync_size, t_syncmer, q_p, max_dist);
-		uint64_t strobe_nr = rhv[0].first.size();
+		std::vector<size_t> rhv = hashing::seq_to_syncmers(kmer_size, seq, sync_size, t_syncmer);
+		uint64_t strobe_nr = rhv.size();
 //		TInterval ci = calculateCI(0.1, kmer_size, strobe_nr, 0.95);
 //		uint64_t threshold = strobe_nr - ci.second;
 		std::vector<uint64_t> max_found(mixf.species_vector.size());
 		std::fill(max_found.begin(), max_found.end(), 0);
 //		std::cout << rhv[0].first.size() << "\t" << seq.size() << std::endl;
-		for (const auto & p : rhv)
-		{
-			std::vector<TIXFAgent::counting_vector> count_vectors = mixf.bulk_count(p.first);
+		
+			std::vector<TIXFAgent::counting_vector> count_vectors = mixf.bulk_count(rhv);
 
 			std::vector<uint64_t> result(mixf.species_vector.size());
 			for (uint64_t i = 0; i < result.size(); ++i)
@@ -539,7 +538,7 @@ int main(int argc, char const **argv)
 				if (result[i] > max_found[i])
 					max_found[i] = result[i];
 			}
-		}
+		
 
 		//break;
 

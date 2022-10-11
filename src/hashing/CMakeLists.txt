@@ -1,5 +1,5 @@
-file(GLOB HASH_SRC "*.cpp")
-file(GLOB HASH_HDRS "*.hpp")
+file(GLOB HASH_SRC "*.cpp" "*.c")
+file(GLOB HASH_HDRS "*.hpp" "*.h")
 
 add_library (hashing STATIC ${HASH_SRC} ${HASH_HDRS})
 

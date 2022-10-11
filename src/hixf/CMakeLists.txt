@@ -8,15 +8,18 @@ add_library (hixf STATIC ${HIXF_SRC} ${HIXF_HDRS})
 #find_package(spdlog REQUIRED)
 
 # include SafeQueue and StopClock
-include_directories("${CMAKE_CURRENT_BINARY_DIR}/../seqan/lemon/include" "${CMAKE_CURRENT_BINARY_DIR}/../seqan/chopper/include")
+include_directories("${CMAKE_CURRENT_BINARY_DIR}/../seqan/lemon/include" 
+                    "${CMAKE_CURRENT_BINARY_DIR}/../seqan/chopper/include"
+                    )
 
 # using seqan
 target_include_directories (hixf PUBLIC 
     ${CMAKE_CURRENT_SOURCE_DIR} 
     ${CMAKE_CURRENT_BINARY_DIR}/../seqan/lemon/include 
     ${CMAKE_CURRENT_BINARY_DIR}/../seqan/chopper/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../hashing
     )
-target_link_libraries (hixf seqan3::seqan3)
+target_link_libraries (hixf seqan3::seqan3 hashing)
 
 #install(TARGETS IBF DESTINATION lib COMPONENT libraries)
 

@@ -19,10 +19,13 @@ struct build_arguments
     window window_size_strong{kmer_size};
     std::string shape_string{};
     seqan3::shape shape{seqan3::ungapped{kmer_size}};
+    bool compute_syncmer{true};
     bool compute_minimiser{false};
     bool disable_cutoffs{false};
+    uint8_t syncmer_size{10u};
+    uint8_t t_syncmer{6u};
 
-    // Related to IBF
+    // Related to IXF
     std::filesystem::path out_path{"./"};
     std::string size{"1k"};
     uint64_t bins{64};
@@ -37,8 +40,9 @@ struct build_arguments
     std::filesystem::path bin_file{};
     uint8_t threads{1u};
     bool is_socks{false};
-    bool is_hibf{false};
+    bool is_hixf{false};
     bool is_minimiser{false};
+    bool is_syncmer{false};
 };
 
-} // namespace raptor
+}

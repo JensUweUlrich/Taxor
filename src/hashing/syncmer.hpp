@@ -7,7 +7,7 @@
 #include <vector>
 #include <deque>
 #include <tuple>
-#include <robin_hood.h>
+//#include <robin_hood.h>
 #include "xxhash.h"
 #include <inttypes.h>
 #include <seqan3/alphabet/nucleotide/all.hpp>

@@ -1,10 +1,10 @@
 
 #include <lemon/list_graph.h> /// Must be first include.
 
-#include "compute_kmers.hpp"
+#include "compute_hashes.hpp"
 #include "construct_ixf.hpp"
 #include "hierarchical_build.hpp"
-#include "initialise_max_bin_kmers.hpp"
+#include "initialise_max_bin_hashes.hpp"
 #include "insert_into_ixf.hpp"
 #include "loop_over_children.hpp"
 #include "update_user_bins.hpp"
@@ -13,7 +13,7 @@ namespace hixf
 {
 
 //template <seqan3::data_layout data_layout_mode>
-size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> & parent_kmers,
+size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> & parent_hashes,
                           lemon::ListDigraph::Node const & current_node,
                           build_data & data,
                           build_arguments const & arguments,
@@ -25,16 +25,18 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> & parent_kmers,
 
     std::vector<int64_t> ixf_positions(current_node_data.number_of_technical_bins, ixf_pos);
     std::vector<int64_t> filename_indices(current_node_data.number_of_technical_bins, -1);
-    robin_hood::unordered_flat_set<size_t> kmers{};
+    robin_hood::unordered_flat_set<size_t> hashes{};
 
-    // initialize lower level IBF
+    // initialize lower level IXF
     size_t const max_bin_tbs =
-        initialise_max_bin_kmers(kmers, ixf_positions, filename_indices, current_node, data, arguments);
-    auto && ixf = construct_ixf(parent_kmers, kmers, max_bin_tbs, current_node, data, arguments, is_root);
-    kmers.clear(); // reduce memory peak
+        initialise_max_bin_hashes(hashes, ixf_positions, filename_indices, current_node, data, arguments);
+    std::cout << max_bin_tbs << std::endl;
+    return 1;
+    auto && ixf = construct_ixf(parent_hashes, hashes, max_bin_tbs, current_node, data, arguments, is_root);
+    hashes.clear(); // reduce memory peak
 
     // parse all other children (merged bins) of the current ibf
-    loop_over_children(parent_kmers, ixf, ixf_positions, current_node, data, arguments, is_root);
+    loop_over_children(parent_hashes, ixf, ixf_positions, current_node, data, arguments, is_root);
 
     // If max bin was a merged bin, process all remaining records, otherwise the first one has already been processed
     size_t const start{(current_node_data.favourite_child != lemon::INVALID) ? 0u : 1u};
@@ -48,12 +50,12 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> & parent_kmers,
         }
         else
         {
-            compute_kmers(kmers, arguments, record);
-            insert_into_ixf(parent_kmers, kmers, record.number_of_bins.back(), record.bin_indices.back(), ixf, is_root);
+            compute_hashes(hashes, arguments, record);
+            insert_into_ixf(parent_hashes, hashes, record.number_of_bins.back(), record.bin_indices.back(), ixf, is_root);
         }
 
         update_user_bins(data, filename_indices, record);
-        kmers.clear();
+        hashes.clear();
     }
 
     data.hixf.ixf_vector[ixf_pos] = std::move(ixf);

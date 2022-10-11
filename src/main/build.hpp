@@ -12,6 +12,7 @@
 #include "Semaphore.hpp"
 #include "SafeMap.hpp"
 #include "Species.hpp"
+#include <syncmer.hpp>
 
 
 
@@ -127,7 +128,7 @@ inline std::string get_seqid( std::string header )
 		
 		for (const auto & ref_s : ref_seqs)
 		{
-			std::vector<uint64_t> strobe_hashes = seq_to_syncmers(kmer_size, ref_s.seq, sync_size, t_syncmer);
+			std::vector<uint64_t> strobe_hashes = hashing::seq_to_syncmers(kmer_size, ref_s.seq, sync_size, t_syncmer);
 			//randstrobes.insert(randstrobes.end(), strobe_hashes.begin(), strobe_hashes.end());
 			//randstrobes.insert(randstrobes.end(),std::make_move_iterator(strobe_hashes.begin()), std::make_move_iterator(strobe_hashes.end()));
 			syncmers.insert(std::make_move_iterator(strobe_hashes.begin()), std::make_move_iterator(strobe_hashes.end()));
@@ -260,7 +261,7 @@ std::pair<uint16_t, bool> add_species_to_filter(std::vector<Species>& species_ve
 		//std::vector<uint64_t> randstrobes{};
 		for (const auto & ref_s : ref_seqs)
 		{
-			std::vector<uint64_t> strobe_hashes = seq_to_syncmers(kmer_size, ref_s.seq, sync_size, t_syncmer);
+			std::vector<uint64_t> strobe_hashes = hashing::seq_to_syncmers(kmer_size, ref_s.seq, sync_size, t_syncmer);
 			syncmers.insert(std::make_move_iterator(strobe_hashes.begin()), std::make_move_iterator(strobe_hashes.end()));
 		}
 

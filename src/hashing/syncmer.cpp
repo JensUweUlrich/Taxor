@@ -1,5 +1,5 @@
 
-#include "index.hpp"
+#include "syncmer.hpp"
 #include <iostream>
 #include <math.h>       /* pow */
 #include <bitset>

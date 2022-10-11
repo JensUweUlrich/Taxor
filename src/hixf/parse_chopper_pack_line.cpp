@@ -1,6 +1,8 @@
 
 #include <ranges>
+#include <filesystem>
 #include <seqan3/std/charconv>
+#include <iostream>
 
 #include "parse_chopper_pack_line.hpp"
 
@@ -23,7 +25,12 @@ chopper_pack_record parse_chopper_pack_line(std::string const & current_line)
     for (auto const && filename : filenames | std::views::split(';'))
     {
         auto const common_view = filename | std::views::common;
-        result.filenames.emplace_back(common_view.begin(), common_view.end());
+        std::filesystem::path fname {std::string(common_view.begin(), common_view.end())};
+        if (std::filesystem::is_symlink(fname))
+        {
+            fname = std::filesystem::read_symlink(fname);
+        }
+        result.filenames.emplace_back(fname.string());
     }
 
     size_t tmp{};
