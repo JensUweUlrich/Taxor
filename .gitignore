@@ -40,4 +40,4 @@ src/.cproject
 src/.project
 
 # directories
-build/
+/build/
