@@ -16,8 +16,6 @@ void create_ixfs_from_chopper_pack(build_data& data, build_arguments const & arg
     robin_hood::unordered_flat_set<size_t> root_hashes{};
 
     size_t const t_max{data.node_map[root].number_of_technical_bins};
-    std::cout << t_max << std::endl;
-    //data.compute_fp_correction(t_max, arguments.hash, arguments.fpr);
 
     hierarchical_build(root_hashes, root, data, arguments, true);
 }

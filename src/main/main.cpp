@@ -408,9 +408,10 @@ int main(int argc, char const **argv)
 
 	hixf::build_arguments args{};
 	args.bin_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/binning.out"};
-	
+	args.out_path = "/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/raptor.hixf";
+	args.compute_syncmer = false;
 	hixf::chopper_build(args);
-
+	
 	return 1;
 	uint64_t q_p = pow (2, 8) - 1;
 	int kmer_size = 16;

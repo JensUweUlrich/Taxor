@@ -49,7 +49,7 @@ using sequence_file_t = seqan3::sequence_file_input<dna4_traits, seqan3::fields<
  void parse_ref_seqs(std::vector< seqan3::dna5_vector >& refs, const std::filesystem::path& reference_file)
  {
 
-	 for (auto && [seq] : sequence_file_t{reference_file})
+	for (auto && [seq] : sequence_file_t{reference_file})
 	 {
 
 		 int counter = 1;
@@ -87,7 +87,6 @@ void compute_hashes(robin_hood::unordered_flat_set<size_t> & hashes,
 			    std::vector<uint64_t> strobe_hashes = hashing::seq_to_syncmers(arguments.kmer_size, seq, arguments.syncmer_size, arguments.t_syncmer);
                 hashes.insert(std::make_move_iterator(strobe_hashes.begin()), std::make_move_iterator(strobe_hashes.end()));
 		    }
-			std::cout << filename << "\t" << hashes.size() << std::endl;
         }
     }
     else if (arguments.is_minimiser)

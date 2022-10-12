@@ -16,7 +16,7 @@ void chopper_build(build_arguments const & arguments)
     create_ixfs_from_chopper_pack(data, arguments);
     std::cout << data.number_of_ixfs << std::endl;
 	std::cout << data.number_of_user_bins << std::endl;
-    return;
+    
     std::vector<std::vector<std::string>> bin_path{};
     for (size_t i{0}; i < data.hixf.user_bins.num_user_bins(); ++i)
         bin_path.push_back(std::vector<std::string>{data.hixf.user_bins.filename_of_user_bin(i)});
@@ -27,7 +27,7 @@ void chopper_build(build_arguments const & arguments)
                                                                                 arguments.compressed,
                                                                                 bin_path,
                                                                                 std::move(data.hixf)};
-
+    
     store_index(arguments.out_path, index, arguments);
 }
 

@@ -11,7 +11,7 @@ namespace hixf
 {
 
 //template <seqan3::data_layout data_layout_mode>
-void loop_over_children(robin_hood::unordered_flat_set<size_t> & parent_kmers,
+void loop_over_children(robin_hood::unordered_flat_set<size_t> & parent_hashes,
                         seqan3::interleaved_xor_filter<> & ixf,
                         std::vector<int64_t> & ixf_positions,
                         lemon::ListDigraph::Node const & current_node,
@@ -29,7 +29,7 @@ void loop_over_children(robin_hood::unordered_flat_set<size_t> & parent_kmers,
         return;
 
     size_t const number_of_mutex = (data.node_map[current_node].number_of_technical_bins + 63) / 64;
-    std::vector<std::mutex> local_ibf_mutex(number_of_mutex);
+    std::vector<std::mutex> local_ixf_mutex(number_of_mutex);
 
     auto worker = [&](auto && index, auto &&)
     {
@@ -37,14 +37,14 @@ void loop_over_children(robin_hood::unordered_flat_set<size_t> & parent_kmers,
 
         if (child != current_node_data.favourite_child)
         {
-            robin_hood::unordered_flat_set<size_t> kmers{};
-            size_t const ibf_pos = hierarchical_build(kmers, child, data, arguments, false);
+            robin_hood::unordered_flat_set<size_t> hashes{};
+            size_t const ixf_pos = hierarchical_build(hashes, child, data, arguments, false);
             auto parent_bin_index = data.node_map[child].parent_bin_index;
             {
                 size_t const mutex_id{parent_bin_index / 64};
-                std::lock_guard<std::mutex> guard{local_ibf_mutex[mutex_id]};
-                ixf_positions[parent_bin_index] = ibf_pos;
-                insert_into_ixf(parent_kmers, kmers, 1, parent_bin_index, ixf, is_root);
+                std::lock_guard<std::mutex> guard{local_ixf_mutex[mutex_id]};
+                ixf_positions[parent_bin_index] = ixf_pos;
+                insert_into_ixf(parent_hashes, hashes, 1, parent_bin_index, ixf, is_root);
             }
         }
     };

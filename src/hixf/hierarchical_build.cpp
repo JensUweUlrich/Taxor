@@ -30,14 +30,15 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> & parent_hashes
     // initialize lower level IXF
     size_t const max_bin_tbs =
         initialise_max_bin_hashes(hashes, ixf_positions, filename_indices, current_node, data, arguments);
-    std::cout << max_bin_tbs << std::endl;
-    return 1;
+    std::cout << "Parent Node: " << current_node_data.parent_bin_index << std::endl;
+    std::cout << "Max Bin TBS: "<< max_bin_tbs << std::endl;
     auto && ixf = construct_ixf(parent_hashes, hashes, max_bin_tbs, current_node, data, arguments, is_root);
+    std::cout << ixf.bin_size() << "\t" << ixf.bit_size() << std::endl;
     hashes.clear(); // reduce memory peak
 
     // parse all other children (merged bins) of the current ibf
     loop_over_children(parent_hashes, ixf, ixf_positions, current_node, data, arguments, is_root);
-
+    std::cout << "after loop_over_children" << std::endl;
     // If max bin was a merged bin, process all remaining records, otherwise the first one has already been processed
     size_t const start{(current_node_data.favourite_child != lemon::INVALID) ? 0u : 1u};
     for (size_t i = start; i < current_node_data.remaining_records.size(); ++i)
@@ -50,8 +51,11 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> & parent_hashes
         }
         else
         {
+            std::cout << "hierarchical_build 54" << std::endl;
             compute_hashes(hashes, arguments, record);
+            std::cout << "hierarchical_build 56" << std::endl;
             insert_into_ixf(parent_hashes, hashes, record.number_of_bins.back(), record.bin_indices.back(), ixf, is_root);
+            std::cout << "hierarchical_build 57" << std::endl;
         }
 
         update_user_bins(data, filename_indices, record);

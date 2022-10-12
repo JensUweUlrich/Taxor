@@ -39,9 +39,7 @@ size_t parse_chopper_pack_header(lemon::ListDigraph & ixf_graph,
     auto parse_first_bin = [](std::string_view const & buffer)
     {
         size_t tmp{};
-        std::cout << buffer.size() << std::endl;
         std::from_chars(&buffer[0], &buffer[0] + buffer.size(), tmp);
-        std::cout << tmp << std::endl;
         return tmp;
     }; // GCOVR_EXCL_LINE
 
