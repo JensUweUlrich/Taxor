@@ -22,11 +22,11 @@
 #include "StopClock.hpp"
 #include "interleaved_binary_fuse_filter.hpp"
 
-#include "index.hpp"
+#include <syncmer.hpp>
 #include "build.hpp"
 
-#include <chopper_build.hpp>
-#include <build_arguments.hpp>
+#include <build/chopper_build.hpp>
+#include <build/build_arguments.hpp>
 
 using namespace seqan3::literals;
 

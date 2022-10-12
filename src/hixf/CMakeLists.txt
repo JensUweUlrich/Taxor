@@ -1,5 +1,5 @@
-file(GLOB HIXF_SRC "*.cpp")
-file(GLOB HIXF_HDRS "*.hpp")
+file(GLOB HIXF_SRC "build/*.cpp" "search/*.cpp")
+file(GLOB HIXF_HDRS "build/*.hpp" "search/*.hpp")
 
 add_library (hixf STATIC ${HIXF_SRC} ${HIXF_HDRS})
 
