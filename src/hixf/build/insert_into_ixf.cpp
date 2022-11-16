@@ -38,6 +38,7 @@ void insert_into_ixf(robin_hood::unordered_flat_set<size_t> & parent_hashes,
     
 }
 
+
 void insert_into_ixf(build_arguments const & arguments,
                      chopper_pack_record const & record,
                      seqan3::interleaved_xor_filter<> & ixf)
@@ -47,7 +48,7 @@ void insert_into_ixf(build_arguments const & arguments,
     compute_hashes(hashes, arguments, record);
     std::vector<size_t> h{hashes.begin(), hashes.end()};
     ixf.add_bin_elements(bin_index, h);
-
+    
 }
 
 } 

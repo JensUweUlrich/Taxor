@@ -11,7 +11,7 @@
 
 namespace hixf
 {
-
+std::set<int64_t> investigate{};
 //template <seqan3::data_layout data_layout_mode>
 size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> & parent_hashes,
                           lemon::ListDigraph::Node const & current_node,
@@ -20,7 +20,7 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> & parent_hashes
                           bool is_root)
 {
     auto & current_node_data = data.node_map[current_node];
-
+    
     size_t const ixf_pos{data.request_ixf_idx()};
 
     std::vector<int64_t> ixf_positions(current_node_data.number_of_technical_bins, ixf_pos);
@@ -40,6 +40,15 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> & parent_hashes
     for (size_t i = start; i < current_node_data.remaining_records.size(); ++i)
     {
         auto const & record = current_node_data.remaining_records[i];
+        
+        for (auto const & filename : record.filenames)
+        {
+            if (filename.compare("files.renamed/GCF_000839085.1_genomic.fna.gz") == 0)
+            {
+                seqan3::debug_stream << "IXF vector index: " << ixf_pos << "\n";
+                investigate.emplace(ixf_pos);
+            }
+        }
 
         if (is_root && record.number_of_bins.back() == 1) // no splitting needed
         {
@@ -53,6 +62,15 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> & parent_hashes
 
         update_user_bins(data, filename_indices, record);
         hashes.clear();
+    }
+
+    for (int64_t p : ixf_positions)
+    {
+        if (investigate.contains(p))
+        {
+            seqan3::debug_stream << "IXF vector index: " << ixf_pos << "\n";
+            investigate.emplace(ixf_pos);
+        }
     }
 
     data.hixf.ixf_vector[ixf_pos] = std::move(ixf);

@@ -3,7 +3,7 @@
 #include <ranges>
 
 #include <seqan3/search/dream_index/interleaved_xor_filter.hpp>
-
+#include <seqan3/core/debug_stream.hpp>
 
 namespace hixf
 {
@@ -296,16 +296,32 @@ private:
     template <std::ranges::forward_range value_range_t>
     void bulk_contains_impl(value_range_t && values, int64_t const ixf_idx, size_t const threshold)
     {
+        auto agent1 = hixf_ptr->ixf_vector[793].template counting_agent<uint16_t>();
+        auto & result1 = agent1.bulk_count(values);
+        seqan3::debug_stream << "Result of index 793: "<< result1 << "\n";
+
+        auto agent2 = hixf_ptr->ixf_vector[761].template counting_agent<uint16_t>();
+        auto & result2 = agent2.bulk_count(values);
+        seqan3::debug_stream << "Result of index 761: "<< result2 << "\n";
+
+        auto agent3 = hixf_ptr->ixf_vector[739].template counting_agent<uint16_t>();
+        auto & result3 = agent3.bulk_count(values);
+        seqan3::debug_stream << "Result of index 739: "<< result3 << "\n";
+
         auto agent = hixf_ptr->ixf_vector[ixf_idx].template counting_agent<uint16_t>();
         auto & result = agent.bulk_count(values);
-
         uint16_t sum{};
-
+        uint16_t max_sum{0};
+        std::cout << "IXF index: " << ixf_idx << std::endl;
+        seqan3::debug_stream << result << "\n";
         for (size_t bin{}; bin < result.size(); ++bin)
         {
             sum += result[bin];
 
             auto const current_filename_index = hixf_ptr->user_bins.filename_index(ixf_idx, bin);
+
+            //if (sum >= 50)
+                
 
             if (current_filename_index < 0) // merged bin
             {
@@ -320,7 +336,11 @@ private:
                     result_buffer.emplace_back(current_filename_index);
                 sum = 0u;
             }
+
+            if (sum > max_sum)
+                max_sum = sum;
         }
+        
     }
 
 public:

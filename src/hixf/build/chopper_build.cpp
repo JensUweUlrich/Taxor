@@ -23,6 +23,9 @@ void chopper_build(build_arguments const & arguments)
 
     raptor_index<hierarchical_interleaved_xor_filter<uint8_t>> index{window{arguments.window_size},
                                                                                 arguments.shape,
+                                                                                arguments.kmer_size,
+                                                                                arguments.syncmer_size,
+                                                                                arguments.t_syncmer,
                                                                                 arguments.parts,
                                                                                 arguments.compressed,
                                                                                 bin_path,

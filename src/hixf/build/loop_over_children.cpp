@@ -30,7 +30,21 @@ void loop_over_children(robin_hood::unordered_flat_set<size_t> & parent_hashes,
 
     size_t const number_of_mutex = (data.node_map[current_node].number_of_technical_bins + 63) / 64;
     std::vector<std::mutex> local_ixf_mutex(number_of_mutex);
-
+    /*
+    for (size_t i = 0; i < current_node_data.remaining_records.size(); ++i)
+    {
+        auto const & record = current_node_data.remaining_records[i];
+        for (auto const & filename : record.filenames)
+        {
+            if (filename.compare("files.renamed/GCF_000839085.1_genomic.fna.gz") == 0)
+            {
+                seqan3::debug_stream << "IXF vector index: " << ixf_pos << "\n";
+                if (current_node_data.parent_bin_index == 0 )
+                    seqan3::debug_stream << "Parent bin: " << current_node_data.parent_bin_index << "\n";
+            }
+        }
+    }
+    */
     auto worker = [&](auto && index, auto &&)
     {
         auto & child = children[index];

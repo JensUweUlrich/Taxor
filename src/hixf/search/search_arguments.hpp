@@ -26,6 +26,7 @@ struct search_arguments
     uint8_t shape_weight{shape.count()};
     uint8_t threads{1u};
     uint8_t parts{1u};
+    bool compute_syncmer{true};
 
     // Related to thresholding
     double tau{0.9999};
@@ -46,7 +47,7 @@ struct search_arguments
     std::filesystem::path out_file{"search.out"};
     bool write_time{false};
     bool is_socks{false};
-    bool is_hibf{false};
+    bool is_hixf{true};
     bool cache_thresholds{false};
 
     hixf::threshold_parameters make_threshold_parameters() const noexcept

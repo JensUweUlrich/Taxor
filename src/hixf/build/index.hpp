@@ -37,6 +37,10 @@ private:
     bool compressed_{};
     std::vector<std::vector<std::string>> bin_path_{};
     data_t ixf_{};
+    uint8_t syncmer_size_{};
+    uint8_t t_syncmer_{};
+    uint8_t kmer_size_{};
+
 
 public:
     //static constexpr seqan3::data_layout data_layout_mode = data_t::data_layout_mode;
@@ -51,12 +55,18 @@ public:
 
     explicit raptor_index(window const window_size,
                           seqan3::shape const shape,
+                          u_int8_t kmer_size,
+                          uint8_t syncmer_size,
+                          uint8_t t_syncmer,
                           uint8_t const parts,
                           bool const compressed,
                           std::vector<std::vector<std::string>> const & bin_path,
                           data_t && ixf) :
         window_size_{window_size.v},
         shape_{shape},
+        kmer_size_{kmer_size},
+        syncmer_size_{syncmer_size},
+        t_syncmer_{t_syncmer},
         parts_{parts},
         compressed_{compressed},
         bin_path_{bin_path},
@@ -66,6 +76,9 @@ public:
     explicit raptor_index(build_arguments const & arguments) :
         window_size_{arguments.window_size},
         shape_{arguments.shape},
+        kmer_size_{arguments.kmer_size},
+        syncmer_size_{arguments.syncmer_size},
+        t_syncmer_{arguments.t_syncmer},
         parts_{arguments.parts},
         compressed_{arguments.compressed},
         bin_path_{arguments.bin_path},
@@ -80,6 +93,9 @@ public:
         //static_assert(index_structure::compressible_from<data_t, other_data_t>);
         window_size_ = other.window_size_;
         shape_ = other.shape_;
+        kmer_size_ = other.kmer_size_;
+        syncmer_size_ = other.syncmer_size_;
+        t_syncmer_ = other.t_syncmer_;
         parts_ = other.parts_;
         compressed_ = true;
         bin_path_ = other.bin_path_;
@@ -92,6 +108,9 @@ public:
         //static_assert(index_structure::compressible_from<data_t, other_data_t>);
         window_size_ = std::move(other.window_size_);
         shape_ = std::move(other.shape_);
+        kmer_size_ = std::move(other.kmer_size_);
+        syncmer_size_ = std::move(other.syncmer_size_);
+        t_syncmer_ = std::move(other.t_syncmer_);
         parts_ = std::move(other.parts_);
         compressed_ = true;
         bin_path_ = std::move(other.bin_path_);
@@ -106,6 +125,21 @@ public:
     seqan3::shape shape() const
     {
         return shape_;
+    }
+
+    uint8_t kmer_size() const
+    {
+        return kmer_size_;
+    }
+
+    uint8_t syncmer_size() const
+    {
+        return syncmer_size_;
+    }
+
+    uint8_t t_syncmer() const
+    {
+        return t_syncmer_;
     }
 
     uint8_t parts() const
@@ -151,6 +185,9 @@ public:
             {
                 archive(window_size_);
                 archive(shape_);
+                archive(kmer_size_);
+                archive(syncmer_size_);
+                archive(t_syncmer_);
                 archive(parts_);
                 archive(compressed_);
                 /*if ((data_layout_mode == seqan3::data_layout::compressed && !compressed_)
@@ -190,6 +227,9 @@ public:
             {
                 archive(window_size_);
                 archive(shape_);
+                archive(kmer_size_);
+                archive(syncmer_size_);
+                archive(t_syncmer_);
                 archive(parts_);
                 archive(compressed_);
                 archive(bin_path_);

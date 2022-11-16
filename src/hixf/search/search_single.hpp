@@ -9,6 +9,7 @@
 #include "load_index.hpp"
 #include "sync_out.hpp"
 #include "threshold.hpp"
+#include <syncmer.hpp>
 
 namespace hixf
 {
@@ -28,7 +29,7 @@ void search_single(search_arguments const & arguments, raptor_index<index_struct
         load_index(index, arguments, index_io_time);
     };
     auto cereal_handle = std::async(std::launch::async, cereal_worker);
-
+    std::cout << "Index loaded" << std::endl;
     seqan3::sequence_file_input<dna4_traits, seqan3::fields<seqan3::field::id, seqan3::field::seq>> fin{
         arguments.query_file};
     using record_type = typename decltype(fin)::record_type;
@@ -58,6 +59,7 @@ void search_single(search_arguments const & arguments, raptor_index<index_struct
     }
 
     hixf::threshold const thresholder{arguments.make_threshold_parameters()};
+    std::cout << "Thresholder created" << std::endl;
 
     auto worker = [&](size_t const start, size_t const end)
     {
@@ -69,12 +71,13 @@ void search_single(search_arguments const & arguments, raptor_index<index_struct
                 return index.ixf().membership_agent();
         }();
         std::string result_string{};
-        std::vector<uint64_t> minimiser;
+        std::vector<uint64_t> hashes;
 
         // TODO: choose between minimizer and syncmers
         auto hash_adaptor = seqan3::views::minimiser_hash(arguments.shape,
                                                           seqan3::window_size{arguments.window_size},
                                                           seqan3::seed{adjust_seed(arguments.shape_weight)});
+        std::cout << "start iterating over reads" << std::endl;
 
         for (auto && [id, seq] : records | seqan3::views::slice(start, end))
         {
@@ -82,11 +85,21 @@ void search_single(search_arguments const & arguments, raptor_index<index_struct
             result_string += id;
             result_string += '\t';
 
-            auto minimiser_view = seq | hash_adaptor | std::views::common;
-            minimiser.assign(minimiser_view.begin(), minimiser_view.end());
-
-            size_t const minimiser_count{minimiser.size()};
-            size_t const threshold = thresholder.get(minimiser_count);
+            if (arguments.compute_syncmer)
+            {
+                seqan3::dna5_vector dna5_vector{seq.begin(), seq.end()};
+                std::vector<uint64_t> strobe_hashes = hashing::seq_to_syncmers(index.kmer_size(),dna5_vector, index.syncmer_size(), index.t_syncmer());
+                hashes.assign(std::make_move_iterator(strobe_hashes.begin()), std::make_move_iterator(strobe_hashes.end()));
+            }
+            else
+            {
+                auto minimiser_view = seq | hash_adaptor | std::views::common;
+                hashes.assign(minimiser_view.begin(), minimiser_view.end());
+            }
+            size_t const hash_count{hashes.size()};
+            size_t const threshold = thresholder.get(hash_count);
+            std::cout << "Threshold: " << threshold << std::endl;
+            std::cout << "Minimizer count: " << hash_count << std::endl;
 
             /*if constexpr (is_ibf)
             {
@@ -104,7 +117,7 @@ void search_single(search_arguments const & arguments, raptor_index<index_struct
             }
             else
             {*/
-                auto & result = counter.bulk_contains(minimiser, threshold); // Results contains user bin IDs
+                auto & result = counter.bulk_contains(hashes, threshold); // Results contains user bin IDs
                 for (auto && count : result)
                 {
                     result_string += std::to_string(count);
@@ -117,6 +130,7 @@ void search_single(search_arguments const & arguments, raptor_index<index_struct
             else
                 result_string += '\n';
             synced_out.write(result_string);
+            break;
         }
     };
 

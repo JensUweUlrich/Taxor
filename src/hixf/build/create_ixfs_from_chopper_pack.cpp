@@ -12,7 +12,7 @@ namespace hixf
 void create_ixfs_from_chopper_pack(build_data& data, build_arguments const & arguments)
 {
     read_chopper_pack_file(data, arguments.bin_file);
-    lemon::ListDigraph::Node root = data.ixf_graph.nodeFromId(0); // root node = high level IBF node
+    lemon::ListDigraph::Node root = data.ixf_graph.nodeFromId(0); // root node = high level IXF node
     robin_hood::unordered_flat_set<size_t> root_hashes{};
 
     size_t const t_max{data.node_map[root].number_of_technical_bins};

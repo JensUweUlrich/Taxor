@@ -1,5 +1,6 @@
 
 #include <seqan3/search/views/minimiser_hash.hpp>
+#include <seqan3/core/debug_stream.hpp>
 #include <syncmer.hpp>
 
 #include "adjust_seed.hpp"
@@ -104,6 +105,7 @@ void compute_hashes(robin_hood::unordered_flat_set<size_t> & hashes,
     {
         //using sequence_file_t = seqan3::sequence_file_input<dna4_traits, seqan3::fields<seqan3::field::seq>>;
         for (auto const & filename : record.filenames)
+        {
             for (auto && [seq] : sequence_file_t{filename})
                 for (auto hash :
                      seq
@@ -111,6 +113,7 @@ void compute_hashes(robin_hood::unordered_flat_set<size_t> & hashes,
                                                          seqan3::window_size{arguments.window_size},
                                                          seqan3::seed{adjust_seed(arguments.shape.count())}))
                     hashes.insert(hash);
+        }
     }
 }
 
