@@ -10,8 +10,7 @@ namespace hixf
 {
 
 //template <seqan3::data_layout data_layout_mode>
-void loop_over_children(robin_hood::unordered_flat_set<size_t> & parent_kmers,
-                        seqan3::interleaved_xor_filter<> & ixf,
+void loop_over_children(std::vector<robin_hood::unordered_flat_set<size_t>> & parent_hashes,
                         std::vector<int64_t> & ixf_positions,
                         lemon::ListDigraph::Node const & current_node,
                         build_data & data,

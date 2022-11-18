@@ -4,15 +4,14 @@
 #include <seqan3/core/algorithm/detail/execution_handler_parallel.hpp>
 
 #include "hierarchical_build.hpp"
-#include "insert_into_ixf.hpp"
+#include "insert_into_bins.hpp"
 #include "loop_over_children.hpp"
 
 namespace hixf
 {
 
 //template <seqan3::data_layout data_layout_mode>
-void loop_over_children(robin_hood::unordered_flat_set<size_t> & parent_hashes,
-                        seqan3::interleaved_xor_filter<> & ixf,
+void loop_over_children(std::vector<robin_hood::unordered_flat_set<size_t>> & parent_hashes,
                         std::vector<int64_t> & ixf_positions,
                         lemon::ListDigraph::Node const & current_node,
                         build_data & data,
@@ -30,37 +29,26 @@ void loop_over_children(robin_hood::unordered_flat_set<size_t> & parent_hashes,
 
     size_t const number_of_mutex = (data.node_map[current_node].number_of_technical_bins + 63) / 64;
     std::vector<std::mutex> local_ixf_mutex(number_of_mutex);
-    /*
-    for (size_t i = 0; i < current_node_data.remaining_records.size(); ++i)
-    {
-        auto const & record = current_node_data.remaining_records[i];
-        for (auto const & filename : record.filenames)
-        {
-            if (filename.compare("files.renamed/GCF_000839085.1_genomic.fna.gz") == 0)
-            {
-                seqan3::debug_stream << "IXF vector index: " << ixf_pos << "\n";
-                if (current_node_data.parent_bin_index == 0 )
-                    seqan3::debug_stream << "Parent bin: " << current_node_data.parent_bin_index << "\n";
-            }
-        }
-    }
-    */
+    
     auto worker = [&](auto && index, auto &&)
     {
         auto & child = children[index];
 
-        if (child != current_node_data.favourite_child)
+        robin_hood::unordered_flat_set<size_t> hashes{};
+        size_t const ixf_pos = hierarchical_build(hashes, child, data, arguments, false); // gets back 793 for low level IXF
+        auto parent_bin_index = data.node_map[child].parent_bin_index;
         {
-            robin_hood::unordered_flat_set<size_t> hashes{};
-            size_t const ixf_pos = hierarchical_build(hashes, child, data, arguments, false);
-            auto parent_bin_index = data.node_map[child].parent_bin_index;
+            size_t const mutex_id{parent_bin_index / 64};
+            std::lock_guard<std::mutex> guard{local_ixf_mutex[mutex_id]};
+            ixf_positions[parent_bin_index] = ixf_pos;
+            insert_into_bins(hashes, parent_hashes, 1, parent_bin_index);
+            //insert_into_ixf(parent_hashes, hashes, 1, parent_bin_index, ixf, is_root);
+            if (is_root && parent_bin_index == 0)
             {
-                size_t const mutex_id{parent_bin_index / 64};
-                std::lock_guard<std::mutex> guard{local_ixf_mutex[mutex_id]};
-                ixf_positions[parent_bin_index] = ixf_pos;
-                insert_into_ixf(parent_hashes, hashes, 1, parent_bin_index, ixf, is_root);
+                std::cout << "Number of hashes in Bin 0: " <<hashes.size() << "\t" << parent_hashes[0].size()<< std::endl;
             }
         }
+        
     };
 
     size_t number_of_threads{};
@@ -80,6 +68,8 @@ void loop_over_children(robin_hood::unordered_flat_set<size_t> & parent_hashes,
 
     seqan3::detail::execution_handler_parallel executioner{number_of_threads};
     executioner.bulk_execute(std::move(worker), std::move(indices), []() {});
+    executioner.wait();
+    // insert all parent hashes before leaving the method
 }
 
 /*

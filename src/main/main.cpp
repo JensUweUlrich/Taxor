@@ -407,14 +407,14 @@ void bins_to_species(multi_interleaved_xor_filter& mixf, std::vector<std::vector
 
 int main(int argc, char const **argv)
 {
-	/*
+	
 	hixf::build_arguments args{};
-	args.bin_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/binning.out"};
+	args.bin_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/small_test_binning.out"};
 	args.out_path = "/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/small_test_kmer.hixf";
 	args.compute_syncmer = false;
 	hixf::chopper_build(args);
-	*/
 
+/*
 	hixf::search_arguments search_args{};
 	search_args.index_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/small_test_kmer.hixf"};
 	search_args.query_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/files.renamed/GCF_000839085.1_genomic.fna.gz"};
@@ -422,7 +422,7 @@ int main(int argc, char const **argv)
 	search_args.compute_syncmer = false;
 	search_args.threshold = 0.2;
 	hixf::search_hixf(search_args);
-
+*/
 
 	return 1;
 	uint64_t q_p = pow (2, 8) - 1;

@@ -296,18 +296,18 @@ private:
     template <std::ranges::forward_range value_range_t>
     void bulk_contains_impl(value_range_t && values, int64_t const ixf_idx, size_t const threshold)
     {
-        auto agent1 = hixf_ptr->ixf_vector[793].template counting_agent<uint16_t>();
+        auto agent1 = hixf_ptr->ixf_vector[21].template counting_agent<uint16_t>();
         auto & result1 = agent1.bulk_count(values);
-        seqan3::debug_stream << "Result of index 793: "<< result1 << "\n";
+        seqan3::debug_stream << "Result of index 21: "<< result1 << "\n";
 
-        auto agent2 = hixf_ptr->ixf_vector[761].template counting_agent<uint16_t>();
+        auto agent2 = hixf_ptr->ixf_vector[25].template counting_agent<uint16_t>();
         auto & result2 = agent2.bulk_count(values);
-        seqan3::debug_stream << "Result of index 761: "<< result2 << "\n";
-
+        seqan3::debug_stream << "Result of index 25: "<< result2 << "\n";
+/*
         auto agent3 = hixf_ptr->ixf_vector[739].template counting_agent<uint16_t>();
         auto & result3 = agent3.bulk_count(values);
         seqan3::debug_stream << "Result of index 739: "<< result3 << "\n";
-
+*/
         auto agent = hixf_ptr->ixf_vector[ixf_idx].template counting_agent<uint16_t>();
         auto & result = agent.bulk_count(values);
         uint16_t sum{};

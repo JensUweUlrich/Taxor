@@ -1,9 +1,9 @@
 
-#include <seqan3/search/views/minimiser_hash.hpp>
+//#include <seqan3/search/views/minimiser_hash.hpp>
 
-#include "adjust_seed.hpp"
+//#include "adjust_seed.hpp"
 #include "insert_into_ixf.hpp"
-#include "dna4_traits.hpp"
+//#include "dna4_traits.hpp"
 #include "compute_hashes.hpp"
 
 namespace hixf
@@ -27,7 +27,10 @@ void insert_into_ixf(robin_hood::unordered_flat_set<size_t> & parent_hashes,
         ++chunk_number;
         std::vector<size_t> c{};
         std::ranges::copy(chunk, std::back_inserter(c));
-        ixf.add_bin_elements(bin_idx, c);
+        // adds hashes to already built bins => problematic
+        bool success = ixf.add_bin_elements(bin_idx, c);
+        if (success)
+            std::cout << "Building IXF not successful" << std::endl;
         for (size_t const value : chunk)
         {
         //    ixf.emplace(value, bin_idx);

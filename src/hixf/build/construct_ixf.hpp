@@ -24,4 +24,6 @@ seqan3::interleaved_xor_filter<> construct_ixf(robin_hood::unordered_flat_set<si
                                                  build_arguments const & arguments,
                                                  bool is_root);
 
+seqan3::interleaved_xor_filter<> construct_ixf(std::vector<robin_hood::unordered_flat_set<size_t>> & node_hashes);
+
 } // namespace raptor::hibf
