@@ -48,15 +48,23 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> & parent_hashes
     // parse all other children (merged bins) of the current ixf
     // does nothing on lowest level
     loop_over_children(node_hashes, ixf_positions, current_node, data, arguments, is_root);
-    // If max bin was a merged bin, process all remaining records, otherwise the first one has already been processed
-    //size_t const start{(current_node_data.favourite_child != lemon::INVALID) ? 0u : 1u};
-    if (is_root)
-        std::cout << "Number of hashes in Bin 0: " <<node_hashes[0].size() << std::endl;
+    // add hashes actual ixf bins into the parent ixf bin
+
+    for (lemon::ListDigraph::OutArcIt arc_it(data.ixf_graph, current_node); arc_it != lemon::INVALID; ++arc_it)
+    {
+        auto child = data.ixf_graph.target(arc_it);
+        size_t child_ixf_pos = ixf_positions[data.node_map[child].parent_bin_index];
+        std::string ixf_tmp_name = "interleavedXOR_" + std::to_string(child_ixf_pos) + ".tmp";
+        auto tmp_file = std::filesystem::temp_directory_path() / ixf_tmp_name;
+        std::ifstream tmp_stream{tmp_file};
+        //TODO: read hashes into node_hashes
+    }
 
     for (size_t i = 0; i < current_node_data.remaining_records.size(); ++i)
     {
         auto const & record = current_node_data.remaining_records[i];
         
+        /*
         for (auto const & filename : record.filenames)
         {
             if (filename.compare("files.renamed/GCF_000839085.1_genomic.fna.gz") == 0)
@@ -66,6 +74,7 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> & parent_hashes
                 compute_hashes(test_hashes, arguments, record);
             }
         }
+        */
 
         if (is_root && record.number_of_bins.back() == 1) // no splitting needed
         {
@@ -85,7 +94,7 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> & parent_hashes
 
         update_user_bins(data, filename_indices, record);
     }
-
+/*
     for (int64_t p : ixf_positions)
     {
         if (investigate.contains(p))
@@ -94,10 +103,22 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> & parent_hashes
             investigate.emplace(ixf_pos);
         }
     }
-
+*/
     // insert all hashes of all technical bins into newly created IXF
     auto && ixf = construct_ixf(node_hashes);
 
+    // TODO: create separate class for reading/writing tmpfiles of hash values
+    std::string ixf_tmp_name = "interleavedXOR_" + std::to_string(ixf_pos) + ".tmp";
+    auto tmp_file = std::filesystem::temp_directory_path() / ixf_tmp_name;
+    std::ofstream tmp_stream{tmp_file};
+    for (auto bin : node_hashes)
+        for (size_t h : bin)
+            tmp_stream << h << " ";
+    tmp_stream.close();
+
+    node_hashes.clear();
+
+/*
     if (is_root)
     {
         std::vector<size_t> c{};
@@ -113,7 +134,7 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> & parent_hashes
 		auto result = ixf_count_agent.bulk_count(c);
         seqan3::debug_stream << "Root result: " << result << "\n";
     }
-
+*/
     data.hixf.ixf_vector[ixf_pos] = std::move(ixf);
     data.hixf.next_ixf_id[ixf_pos] = std::move(ixf_positions);
     data.hixf.user_bins.bin_indices_of_ixf(ixf_pos) = std::move(filename_indices);

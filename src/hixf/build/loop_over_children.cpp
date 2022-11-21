@@ -42,11 +42,6 @@ void loop_over_children(std::vector<robin_hood::unordered_flat_set<size_t>> & pa
             std::lock_guard<std::mutex> guard{local_ixf_mutex[mutex_id]};
             ixf_positions[parent_bin_index] = ixf_pos;
             insert_into_bins(hashes, parent_hashes, 1, parent_bin_index);
-            //insert_into_ixf(parent_hashes, hashes, 1, parent_bin_index, ixf, is_root);
-            if (is_root && parent_bin_index == 0)
-            {
-                std::cout << "Number of hashes in Bin 0: " <<hashes.size() << "\t" << parent_hashes[0].size()<< std::endl;
-            }
         }
         
     };
