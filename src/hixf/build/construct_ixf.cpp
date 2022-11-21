@@ -4,6 +4,7 @@
 #include "bin_size_in_bits.hpp"
 #include "construct_ixf.hpp"
 #include "insert_into_ixf.hpp"
+#include "temp_hash_file.hpp"
 
 namespace hixf
 {
@@ -31,17 +32,68 @@ seqan3::interleaved_xor_filter<> construct_ixf(robin_hood::unordered_flat_set<si
     return ixf;
 }
 
-seqan3::interleaved_xor_filter<> construct_ixf(std::vector<robin_hood::unordered_flat_set<size_t>> & node_hashes)
+seqan3::interleaved_xor_filter<> construct_ixf(build_data & data, 
+                                               lemon::ListDigraph::Node const & current_node,
+                                               std::vector<int64_t> & ixf_positions,
+                                               std::vector<robin_hood::unordered_flat_set<size_t>> &node_hashes)
 {
-    
-    std::vector<std::vector<size_t>> tmp{};
-    for (auto hash_bin : node_hashes)
+    auto &current_node_data = data.node_map[current_node];
+    // create empty IXF based on number of technical bins and max number of hashes per bin
+    seqan3::interleaved_xor_filter<> ixf{current_node_data.number_of_technical_bins, current_node_data.max_bin_hashes};
+    // first iterate over all child IXFs 
+    uint16_t last_bin_index{};
+    bool success{false};
+    while (!success)
     {
-        std::vector<size_t> c{};
-        std::ranges::copy(hash_bin, std::back_inserter(c));
-        tmp.emplace_back(c);
+        for (lemon::ListDigraph::OutArcIt arc_it(data.ixf_graph, current_node); arc_it != lemon::INVALID; ++arc_it)
+        {
+            auto child = data.ixf_graph.target(arc_it);
+            auto& child_node_data = data.node_map[child];
+            size_t child_ixf_pos = ixf_positions[child_node_data.parent_bin_index];
+            std::vector<size_t> hashes{};
+            // read in hashes of child IXF and add all hashes to corresponding bin of current node IXF
+            read_from_temp_hash_file(ixf_positions[data.node_map[child].parent_bin_index], hashes);
+            success = ixf.add_bin_elements(data.node_map[child].parent_bin_index, hashes);
+            if(!success)
+                break;
+        }
+        // reset seed if adding bin to IXF was not successful
+        if (!success)
+        {   
+            ixf.clear();
+            ixf.set_seed();
+            continue;
+        }
+
+        // iterate over new hashes
+        // add hashes of bins for newly computed hashes on that level
+        uint16_t bin_idx{0};
+        for (auto hash_bin : node_hashes)
+        {
+            if (hash_bin.size() == 0)
+            {
+                bin_idx++;
+                continue;
+            }
+            std::vector<size_t> c{};
+            std::ranges::copy(hash_bin, std::back_inserter(c));
+            if (bin_idx <= last_bin_index)
+                std::cerr << "wrong bin index assignment!" << std::endl;
+            
+            success = ixf.add_bin_elements(bin_idx, c);
+            if(!success)
+                break;
+        }
+
+        // reset seed if adding bin to IXF was not successful
+        if (!success)
+        {   
+            ixf.clear();
+            ixf.set_seed();
+            continue;
+        }
     }
-    seqan3::interleaved_xor_filter<> ixf{tmp};
+    
 
     return ixf;
 }

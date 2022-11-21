@@ -11,9 +11,8 @@ namespace hixf
 {
 
 //template <seqan3::data_layout data_layout_mode>
-void loop_over_children(std::vector<robin_hood::unordered_flat_set<size_t>> & parent_hashes,
-                        std::vector<int64_t> & ixf_positions,
-                        lemon::ListDigraph::Node const & current_node,
+void loop_over_children(std::vector<int64_t> & ixf_positions,
+                        lemon::ListDigraph::Node const &current_node,
                         build_data & data,
                         build_arguments const & arguments,
                         bool is_root)
@@ -34,14 +33,18 @@ void loop_over_children(std::vector<robin_hood::unordered_flat_set<size_t>> & pa
     {
         auto & child = children[index];
 
-        robin_hood::unordered_flat_set<size_t> hashes{};
-        size_t const ixf_pos = hierarchical_build(hashes, child, data, arguments, false); // gets back 793 for low level IXF
+        size_t const ixf_pos = hierarchical_build(child, data, arguments, false); // gets back 793 for low level IXF
         auto parent_bin_index = data.node_map[child].parent_bin_index;
         {
             size_t const mutex_id{parent_bin_index / 64};
             std::lock_guard<std::mutex> guard{local_ixf_mutex[mutex_id]};
             ixf_positions[parent_bin_index] = ixf_pos;
-            insert_into_bins(hashes, parent_hashes, 1, parent_bin_index);
+            // number of hashes stored in child IXF equals number of hashes in one corresponding bin
+            // of current node => maximum bin size for current node's IXF needs to be known before
+            // constructing the IXF at the current level
+            auto &child_node_data = data.node_map[child];
+            if (child_node_data.number_of_hashes > current_node_data.max_bin_hashes)
+                current_node_data.max_bin_hashes = child_node_data.number_of_hashes;
         }
         
     };

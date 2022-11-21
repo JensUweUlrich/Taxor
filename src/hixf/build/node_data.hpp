@@ -15,6 +15,8 @@ struct node_data // rename:ibf_data? or ibf_node_data
     size_t parent_bin_index{};
     size_t max_bin_index{};
     size_t number_of_technical_bins{};
+    size_t max_bin_hashes{};
+    size_t number_of_hashes{};
     lemon::ListDigraph::Node favourite_child{lemon::INVALID};
     std::vector<chopper_pack_record> remaining_records{}; // non-merged bins (either split or single)
 

@@ -414,7 +414,6 @@ int main(int argc, char const **argv)
 	args.compute_syncmer = false;
 	hixf::chopper_build(args);
 
-
 /*
 	hixf::search_arguments search_args{};
 	search_args.index_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/small_test_kmer.hixf"};
