@@ -16,8 +16,8 @@ namespace hixf
 std::set<int64_t> investigate{};
 robin_hood::unordered_flat_set<size_t> test_hashes{};
 //template <seqan3::data_layout data_layout_mode>
-size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> parent_hashes,
-                          lemon::ListDigraph::Node const & current_node,
+size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> &parent_hashes,
+                          lemon::ListDigraph::Node & current_node,
                           build_data & data,
                           build_arguments const & arguments,
                           bool is_root,
@@ -67,12 +67,6 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> parent_hashes,
             compute_hashes(hashes, arguments, record);
             // only insert into hashes and parent_hashes and not into IXF directly
             insert_into_bins(hashes, node_hashes, record.number_of_bins.back(), record.bin_indices.back());
-            size_t bin_size = hashes.size() / record.number_of_bins.back() + 1;
-            current_node_data.number_of_hashes += hashes.size();
-            if (bin_size > current_node_data.max_bin_hashes)
-                current_node_data.max_bin_hashes = bin_size;
-
-            hashes.clear();
         }
 
         update_user_bins(data, filename_indices, record);
@@ -92,9 +86,6 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> parent_hashes,
     if (is_root)
     {
         auto && ixf = construct_ixf(data, current_node, ixf_positions, node_hashes, ixf_pos);
-        data.hixf.ixf_vector[ixf_pos] = std::move(ixf);
-        data.hixf.next_ixf_id[ixf_pos] = std::move(ixf_positions);
-        data.hixf.user_bins.bin_indices_of_ixf(ixf_pos) = std::move(filename_indices);
 
         // only for debugging
         std::vector<size_t> c{};
@@ -109,6 +100,12 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> parent_hashes,
         TIXFAgent ixf_count_agent = ixf.counting_agent< uint64_t >();
 		auto result = ixf_count_agent.bulk_count(c);
         seqan3::debug_stream << "Root result: " << result << "\n";
+
+
+        data.hixf.ixf_vector[ixf_pos] = std::move(ixf);
+        data.hixf.next_ixf_id[ixf_pos] = std::move(ixf_positions);
+        data.hixf.user_bins.bin_indices_of_ixf(ixf_pos) = std::move(filename_indices);
+
     }
     else
     {
@@ -116,13 +113,21 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> parent_hashes,
         // reduces peak memory
         if (parent_is_root)
         {
-            create_temp_hash_file(ixf_pos, node_hashes);
+            robin_hood::unordered_flat_set<size_t> hashset{};
+            for (auto hash_bin : node_hashes)
+                for (size_t hash : hash_bin)
+                    hashset.insert(hash);
+            
+            current_node_data.number_of_hashes = hashset.size();
+            create_temp_hash_file(ixf_pos, hashset);
         }
         else
         {
-            for (auto& hash_bin : node_hashes)
-                for (size_t &hash : hash_bin)
+            for (auto hash_bin : node_hashes)
+            {
+                for (size_t hash : hash_bin)
                     parent_hashes.insert(hash);
+            }
         }
         // insert all hashes of all technical bins into newly created IXF
         auto && ixf = construct_ixf(node_hashes);

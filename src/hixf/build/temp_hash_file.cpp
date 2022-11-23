@@ -6,15 +6,14 @@
 namespace hixf
 {
 
-void create_temp_hash_file(size_t const ixf_pos, std::vector<robin_hood::unordered_flat_set<size_t>> &node_hashes)
+void create_temp_hash_file(size_t const ixf_pos, robin_hood::unordered_flat_set<size_t> &node_hashes)
 {
     std::string ixf_tmp_name = "interleavedXOR_" + std::to_string(ixf_pos) + ".tmp";
     auto tmp_file = std::filesystem::temp_directory_path() / ixf_tmp_name;
-    std::ofstream tmp_stream{tmp_file};
-    for (auto bin : node_hashes)
+    std::ofstream tmp_stream(tmp_file,std::ios::out | std::ios::trunc | std::ios::binary);
+    for (size_t hash : node_hashes)
     {   
-        for (size_t h : bin)
-            tmp_stream << h << " ";
+        tmp_stream.write((char*)& hash, sizeof(hash));
     }
     tmp_stream.close();
 }
@@ -28,18 +27,18 @@ void read_from_temp_hash_file(int64_t & ixf_position,
     auto tmp_file = std::filesystem::temp_directory_path() / ixf_tmp_name;
     if (!std::filesystem::exists(tmp_file))
     {
-        std::cerr << ixf_tmp_name << "does not exist!" << std::endl;
+        //std::cerr << ixf_tmp_name << "does not exist!" << std::endl;
         return;
     }
-    std::ifstream tmp_stream{tmp_file};
-    robin_hood::unordered_flat_set<size_t> hashset{};
+    std::ifstream tmp_stream(tmp_file, std::ios::in | std::ios::binary);
     size_t x;
-    while (tmp_stream >> x)
+    while (tmp_stream.read((char * ) & x, sizeof(x)))
     {
-        hashset.insert(x);
+        node_hashes.emplace_back(x);
     }
     tmp_stream.close();
-    std::ranges::move(hashset, std::back_inserter(node_hashes));
+    
+    
     //std::filesystem::remove(tmp_file);
     
 

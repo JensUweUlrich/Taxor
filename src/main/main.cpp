@@ -29,6 +29,12 @@
 #include <build/build_arguments.hpp>
 #include <search/search_arguments.hpp>
 #include <search/search_hixf.hpp>
+#include <build/temp_hash_file.hpp>
+#include <seqan3/search/views/minimiser_hash.hpp>
+#include <build/adjust_seed.hpp>
+#include <build/dna4_traits.hpp>
+
+#include <robin_hood.h>
 
 using namespace seqan3::literals;
 
@@ -407,15 +413,42 @@ void bins_to_species(multi_interleaved_xor_filter& mixf, std::vector<std::vector
 
 int main(int argc, char const **argv)
 {
+
 	
+	using sequence_file_t = seqan3::sequence_file_input<hixf::dna4_traits, seqan3::fields<seqan3::field::seq>>;
 	hixf::build_arguments args{};
-	args.bin_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/small_test_binning.out"};
-	args.out_path = "/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/small_test_kmer.hixf";
+	std::vector<std::vector<size_t>> bins{};
+	for (int64_t pos = 1; pos < 1500;++pos)
+	{
+		std::vector<size_t> hashes{};
+		hixf::read_from_temp_hash_file(pos, hashes);
+		if (hashes.empty())
+			continue;
+		bins.emplace_back(hashes);
+	}
+	seqan3::interleaved_xor_filter<> ixf{bins};		
+	robin_hood::unordered_flat_set<size_t> read_hashes{};
+	for (auto && [seq] : sequence_file_t{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/files.renamed/GCF_000839085.1_genomic.fna.gz"})
+                for (auto hash :
+                     seq
+                         | seqan3::views::minimiser_hash(args.shape,
+                                                         seqan3::window_size{args.window_size},
+                                                         seqan3::seed{hixf::adjust_seed(args.shape.count())}))
+                    read_hashes.insert(hash);
+	std::vector<size_t> c{};
+    std::ranges::copy(read_hashes, std::back_inserter(c));
+	TIXFAgent ixf_count_agent = ixf.counting_agent< uint64_t >();
+	auto result = ixf_count_agent.bulk_count(c);
+    seqan3::debug_stream << "Root result: " << result << "\n";
+	
+
+/*
+	hixf::build_arguments args{};
+	args.bin_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/binning.out"};
+	args.out_path = "/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/raptor_kmer.hixf";
 	args.compute_syncmer = false;
 	hixf::chopper_build(args);
-
-
-
+*/	
 /*
 	hixf::search_arguments search_args{};
 	search_args.index_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/small_test_kmer.hixf"};
