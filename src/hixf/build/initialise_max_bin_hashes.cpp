@@ -23,7 +23,7 @@ size_t initialise_max_bin_hashes(robin_hood::unordered_flat_set<size_t> & hashes
     {
         // recursively initialize favourite child first
         ixf_positions[node_data.max_bin_index] =
-            hierarchical_build(node_data.favourite_child, data, arguments, false);
+            hierarchical_build(hashes, node_data.favourite_child, data, arguments, false, true);
         return 1;
     }
     else // max bin is not a merged bin

@@ -59,7 +59,7 @@ size_t parse_chopper_pack_header(lemon::ListDigraph & ixf_graph,
     
     auto high_level_node = ixf_graph.addNode(); // high-level node = root node
    
-    node_map.set(high_level_node, {0, parse_first_bin(hixf_max_bin_str), 0, lemon::INVALID, {}});
+    node_map.set(high_level_node, {0, parse_first_bin(hixf_max_bin_str), 0, 0, 0, lemon::INVALID, {}});
    
     std::vector<std::pair<std::vector<size_t>, size_t>> header_records{};
     
@@ -109,7 +109,7 @@ size_t parse_chopper_pack_header(lemon::ListDigraph & ixf_graph,
 
         auto new_node = ixf_graph.addNode();
         ixf_graph.addArc(current_node, new_node);
-        node_map.set(new_node, {bin_indices.back(), max_id, 0, lemon::INVALID, {}});
+        node_map.set(new_node, {bin_indices.back(), max_id, 0, 0, 0, lemon::INVALID, {}});
 
         if (node_map[current_node].max_bin_index == bin_indices.back())
             node_map[current_node].favourite_child = new_node;

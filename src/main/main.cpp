@@ -409,10 +409,12 @@ int main(int argc, char const **argv)
 {
 	
 	hixf::build_arguments args{};
-	args.bin_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/binning.out"};
-	args.out_path = "/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/raptor_kmer.hixf";
+	args.bin_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/small_test_binning.out"};
+	args.out_path = "/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/small_test_kmer.hixf";
 	args.compute_syncmer = false;
 	hixf::chopper_build(args);
+
+
 
 /*
 	hixf::search_arguments search_args{};

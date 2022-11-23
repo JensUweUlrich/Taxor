@@ -11,7 +11,8 @@ namespace hixf
 {
 
 //template <seqan3::data_layout data_layout_mode>
-void loop_over_children(std::vector<int64_t> & ixf_positions,
+void loop_over_children(std::vector<robin_hood::unordered_flat_set<size_t>> & parent_hashes,
+                        std::vector<int64_t> & ixf_positions,
                         lemon::ListDigraph::Node const &current_node,
                         build_data & data,
                         build_arguments const & arguments,
@@ -28,17 +29,26 @@ void loop_over_children(std::vector<int64_t> & ixf_positions,
 
     size_t const number_of_mutex = (data.node_map[current_node].number_of_technical_bins + 63) / 64;
     std::vector<std::mutex> local_ixf_mutex(number_of_mutex);
+    bool parent_is_root{false};
+    if (is_root)
+        parent_is_root = true;
     
     auto worker = [&](auto && index, auto &&)
     {
         auto & child = children[index];
-
-        size_t const ixf_pos = hierarchical_build(child, data, arguments, false); // gets back 793 for low level IXF
+        robin_hood::unordered_flat_set<size_t> hashes{};
+        size_t const ixf_pos = hierarchical_build(hashes, child, data, arguments, false, parent_is_root); // gets back 793 for low level IXF
         auto parent_bin_index = data.node_map[child].parent_bin_index;
         {
             size_t const mutex_id{parent_bin_index / 64};
             std::lock_guard<std::mutex> guard{local_ixf_mutex[mutex_id]};
             ixf_positions[parent_bin_index] = ixf_pos;
+            // insert into parent_hashes if current node is not root
+            // parent_hashes of level under root need to be stored on disk
+            // to reduce peak memory
+            if (!is_root)
+                insert_into_bins(hashes, parent_hashes, 1, parent_bin_index);
+            
             // number of hashes stored in child IXF equals number of hashes in one corresponding bin
             // of current node => maximum bin size for current node's IXF needs to be known before
             // constructing the IXF at the current level

@@ -16,10 +16,12 @@ namespace hixf
 std::set<int64_t> investigate{};
 robin_hood::unordered_flat_set<size_t> test_hashes{};
 //template <seqan3::data_layout data_layout_mode>
-size_t hierarchical_build(lemon::ListDigraph::Node const & current_node,
+size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> parent_hashes,
+                          lemon::ListDigraph::Node const & current_node,
                           build_data & data,
                           build_arguments const & arguments,
-                          bool is_root)
+                          bool is_root,
+                          bool parent_is_root)
 {
     auto & current_node_data = data.node_map[current_node];
     
@@ -35,22 +37,10 @@ size_t hierarchical_build(lemon::ListDigraph::Node const & current_node,
         node_hashes.emplace_back(bin_data);
     }
 
-    // initialize lower level IXF
-    // deprecated since wefirst create lower level IXFs and return hashes to higher levels before creating
-    // higher level IXF
-    /*
-    size_t const max_bin_tbs =
-        initialise_max_bin_hashes(hashes, ixf_positions, filename_indices, current_node, data, arguments);
-    auto && ixf = construct_ixf(parent_hashes, hashes, max_bin_tbs, current_node, data, arguments, is_root);
-    */
-    //hashes.clear(); // reduce memory peak
-
     // parse all other children (merged bins) of the current ixf
     // does nothing on lowest level
-    loop_over_children(ixf_positions, current_node, data, arguments, is_root);
-    // add hashes actual ixf bins into the parent ixf bin
+    loop_over_children(node_hashes, ixf_positions, current_node, data, arguments, is_root);
 
-    read_from_temp_hash_file(data, current_node, ixf_positions, node_hashes);
     for (size_t i = 0; i < current_node_data.remaining_records.size(); ++i)
     {
         auto const & record = current_node_data.remaining_records[i];
@@ -97,16 +87,16 @@ size_t hierarchical_build(lemon::ListDigraph::Node const & current_node,
         }
     }
 
-    // insert all hashes of all technical bins into newly created IXF
-    auto && ixf = construct_ixf(data, current_node_data, ixf_pos, node_hashes);
-
-    create_temp_hash_file(ixf_pos, node_hashes);
-
-    node_hashes.clear();
-
-
+    // store hashes in parent_hash_set 
+    // only wite hashes to file if parent is root IXF
     if (is_root)
     {
+        auto && ixf = construct_ixf(data, current_node, ixf_positions, node_hashes, ixf_pos);
+        data.hixf.ixf_vector[ixf_pos] = std::move(ixf);
+        data.hixf.next_ixf_id[ixf_pos] = std::move(ixf_positions);
+        data.hixf.user_bins.bin_indices_of_ixf(ixf_pos) = std::move(filename_indices);
+
+        // only for debugging
         std::vector<size_t> c{};
         std::ranges::copy(test_hashes, std::back_inserter(c));
         typedef seqan3::interleaved_xor_filter<>::counting_agent_type< uint64_t > TIXFAgent;
@@ -120,10 +110,28 @@ size_t hierarchical_build(lemon::ListDigraph::Node const & current_node,
 		auto result = ixf_count_agent.bulk_count(c);
         seqan3::debug_stream << "Root result: " << result << "\n";
     }
+    else
+    {
+        // for level below root, we store hashes of the IXF in a temp file
+        // reduces peak memory
+        if (parent_is_root)
+        {
+            create_temp_hash_file(ixf_pos, node_hashes);
+        }
+        else
+        {
+            for (auto& hash_bin : node_hashes)
+                for (size_t &hash : hash_bin)
+                    parent_hashes.insert(hash);
+        }
+        // insert all hashes of all technical bins into newly created IXF
+        auto && ixf = construct_ixf(node_hashes);
+        data.hixf.ixf_vector[ixf_pos] = std::move(ixf);
+        data.hixf.next_ixf_id[ixf_pos] = std::move(ixf_positions);
+        data.hixf.user_bins.bin_indices_of_ixf(ixf_pos) = std::move(filename_indices);
+    }
 
-    data.hixf.ixf_vector[ixf_pos] = std::move(ixf);
-    data.hixf.next_ixf_id[ixf_pos] = std::move(ixf_positions);
-    data.hixf.user_bins.bin_indices_of_ixf(ixf_pos) = std::move(filename_indices);
+    node_hashes.clear();
 
     return ixf_pos;
 }
