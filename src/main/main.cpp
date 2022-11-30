@@ -385,7 +385,6 @@ void load_and_query_ixf(const std::string filter_file, size_t elements, size_t b
 	
 	ixf_query.stop();
 	std::cout << "Queried " << batches * elements <<" keys in IBF in " << ixf_query.elapsed() << " seconds" << std::endl;
-
 }
 
 void bins_to_species(multi_interleaved_xor_filter& mixf, std::vector<std::vector<Species*>>& bins2vec)
@@ -414,19 +413,37 @@ void bins_to_species(multi_interleaved_xor_filter& mixf, std::vector<std::vector
 int main(int argc, char const **argv)
 {
 
-	
-	using sequence_file_t = seqan3::sequence_file_input<hixf::dna4_traits, seqan3::fields<seqan3::field::seq>>;
+	// Print debuging of bulk count method to fid error when building ixf
+/*	using sequence_file_t = seqan3::sequence_file_input<hixf::dna4_traits, seqan3::fields<seqan3::field::seq>>;
 	hixf::build_arguments args{};
 	std::vector<std::vector<size_t>> bins{};
-	for (int64_t pos = 1; pos < 1500;++pos)
+
+	seqan3::interleaved_xor_filter<> ixf{64, 7000000};
+	bool success = false;
+	while (!success)
 	{
-		std::vector<size_t> hashes{};
-		hixf::read_from_temp_hash_file(pos, hashes);
-		if (hashes.empty())
-			continue;
-		bins.emplace_back(hashes);
+		size_t bin_idx{0};
+		for (int64_t pos = 199; pos < 200;++pos)
+		{
+			std::vector<size_t> hashes{};
+			hixf::read_from_temp_hash_file(pos, hashes);
+			if (hashes.empty())
+				continue;
+			//bins.emplace_back(hashes);
+			success = ixf.add_bin_elements(bin_idx, hashes);
+			std::cout << bin_idx << "\t" << hashes.size() << std::endl;
+			bin_idx++;
+			if (!success)
+				break;
+		}
+		if (!success)
+		{
+			ixf.clear();
+            ixf.set_seed();
+			std::cout << "Reset seed after bin " << bin_idx << std::endl;
+		}
 	}
-	seqan3::interleaved_xor_filter<> ixf{bins};		
+
 	robin_hood::unordered_flat_set<size_t> read_hashes{};
 	for (auto && [seq] : sequence_file_t{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/files.renamed/GCF_000839085.1_genomic.fna.gz"})
                 for (auto hash :
@@ -441,14 +458,15 @@ int main(int argc, char const **argv)
 	auto result = ixf_count_agent.bulk_count(c);
     seqan3::debug_stream << "Root result: " << result << "\n";
 	
+*/
 
-/*
 	hixf::build_arguments args{};
 	args.bin_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/binning.out"};
 	args.out_path = "/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/raptor_kmer.hixf";
 	args.compute_syncmer = false;
 	hixf::chopper_build(args);
-*/	
+
+	
 /*
 	hixf::search_arguments search_args{};
 	search_args.index_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/small_test_kmer.hixf"};
@@ -457,8 +475,8 @@ int main(int argc, char const **argv)
 	search_args.compute_syncmer = false;
 	search_args.threshold = 0.2;
 	hixf::search_hixf(search_args);
-*/
 
+*/
 	return 1;
 	uint64_t q_p = pow (2, 8) - 1;
 	int kmer_size = 16;

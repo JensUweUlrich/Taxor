@@ -60,20 +60,26 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
     
     bool success{false};
 
-    while (!success)
+    std::map<size_t, int64_t> bins{};
+    for (lemon::ListDigraph::OutArcIt arc_it(data.ixf_graph, current_node); arc_it != lemon::INVALID; ++arc_it)
     {
-        success = true;
-        for (lemon::ListDigraph::OutArcIt arc_it(data.ixf_graph, current_node); arc_it != lemon::INVALID; ++arc_it)
-        {
             auto child = data.ixf_graph.target(arc_it);
             auto& child_node_data = data.node_map[child];
             int64_t child_ixf_pos = ixf_positions[child_node_data.parent_bin_index];
+            bins.insert(std::make_pair(child_node_data.parent_bin_index, child_ixf_pos));
+    }
+    while (!success)
+    {
+        success = true;
+        for (std::map<size_t, int64_t>::iterator it = bins.begin(); it != bins.end(); ++it)
+        {
+
             std::vector<size_t> hashes{};
             // read in hashes of child IXF and add all hashes to corresponding bin of current node IXF
-            read_from_temp_hash_file(child_ixf_pos, hashes);
+            read_from_temp_hash_file((*it).second, hashes);
             //if ( hashes.size() > current_node_data.max_bin_hashes)
-            std::cerr << child_ixf_pos <<"\t" << hashes.size() << "\t" << current_node_data.max_bin_hashes << std::endl;
-            success = ixf.add_bin_elements(data.node_map[child].parent_bin_index, hashes);
+            std::cerr << (*it).first << "\t" << (*it).second <<"\t" << hashes.size() << "\t" << current_node_data.max_bin_hashes << std::endl;
+            success = ixf.add_bin_elements((*it).first, hashes);
             if(!success)
                 break;
 
@@ -88,6 +94,7 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
 
         // iterate over new hashes
         // add hashes of bins for newly computed hashes on that level
+        /*
         uint16_t bin_idx{0};
         for (auto hash_bin : node_hashes)
         {
@@ -106,7 +113,7 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
 
             bin_idx++;
         }
-
+        */
         // reset seed if adding bin to IXF was not successful
         if (!success)
         {   
@@ -118,7 +125,7 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
     }
     
 
-    return ixf;
+    return std::move(ixf);
 }
 
 /*template seqan3::interleaved_bloom_filter<>

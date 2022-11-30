@@ -93,14 +93,12 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> &parent_hashes,
         typedef seqan3::interleaved_xor_filter<>::counting_agent_type< uint64_t > TIXFAgent;
         for (uint64_t p : investigate)
         {
+            if (p == 0)
+                continue;
             TIXFAgent ixf_count_agent = data.hixf.ixf_vector[p].counting_agent< uint64_t >();
 		    auto result = ixf_count_agent.bulk_count(c);
             seqan3::debug_stream << "Index " << p << ": " << result << "\n";
         }
-        TIXFAgent ixf_count_agent = ixf.counting_agent< uint64_t >();
-		auto result = ixf_count_agent.bulk_count(c);
-        seqan3::debug_stream << "Root result: " << result << "\n";
-
 
         data.hixf.ixf_vector[ixf_pos] = std::move(ixf);
         data.hixf.next_ixf_id[ixf_pos] = std::move(ixf_positions);
