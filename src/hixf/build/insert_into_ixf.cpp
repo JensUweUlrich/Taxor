@@ -14,7 +14,8 @@ void insert_into_ixf(robin_hood::unordered_flat_set<size_t> & parent_hashes,
                      robin_hood::unordered_flat_set<size_t> const & hashes,
                      size_t const number_of_bins,
                      size_t const bin_index,
-                     seqan3::interleaved_xor_filter<> & ixf,
+//                     seqan3::interleaved_xor_filter<> & ixf,
+                     seqan3::interleaved_binary_fuse_filter<> & ixf,
                      bool is_root)
 {
     size_t const chunk_size = hashes.size() / number_of_bins + 1;
@@ -44,7 +45,8 @@ void insert_into_ixf(robin_hood::unordered_flat_set<size_t> & parent_hashes,
 
 void insert_into_ixf(build_arguments const & arguments,
                      chopper_pack_record const & record,
-                     seqan3::interleaved_xor_filter<> & ixf)
+//                     seqan3::interleaved_xor_filter<> & ixf)
+                     seqan3::interleaved_binary_fuse_filter<> & ixf)
 {
     auto const bin_index = static_cast<size_t>(record.bin_indices.back());
     robin_hood::unordered_flat_set<size_t> hashes{};

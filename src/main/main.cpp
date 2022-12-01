@@ -20,7 +20,6 @@
 
 #include <zlib.h>
 #include "StopClock.hpp"
-#include "interleaved_binary_fuse_filter.hpp"
 
 #include <syncmer.hpp>
 #include "build.hpp"
@@ -245,7 +244,7 @@ void construct_and_query_iff(size_t bins, size_t elements_per_bin)
 	}
 	StopClock iff_construct{};
 	iff_construct.start();
-	ulrich2::interleaved_binary_fuse_filter<> iff(elems);
+	seqan3::interleaved_binary_fuse_filter<> iff(elems);
 
 /*	while (true)
 	{
@@ -278,7 +277,7 @@ void construct_and_query_iff(size_t bins, size_t elements_per_bin)
 
 	StopClock iff_query{};
 	iff_query.start();
-	typedef ulrich2::interleaved_binary_fuse_filter<>::counting_agent_type< uint64_t > TIFFAgent;
+	typedef seqan3::interleaved_binary_fuse_filter<>::counting_agent_type< uint64_t > TIFFAgent;
 	TIFFAgent iff_count_agent = iff.counting_agent< uint64_t >();
 	//auto result = count_agent.bulk_count(readHs);
 	auto iff_result = iff_count_agent.bulk_count(elems[2]);
@@ -414,23 +413,25 @@ int main(int argc, char const **argv)
 {
 
 	// Print debuging of bulk count method to fid error when building ixf
-/*	using sequence_file_t = seqan3::sequence_file_input<hixf::dna4_traits, seqan3::fields<seqan3::field::seq>>;
+	/*using sequence_file_t = seqan3::sequence_file_input<hixf::dna4_traits, seqan3::fields<seqan3::field::seq>>;
 	hixf::build_arguments args{};
 	std::vector<std::vector<size_t>> bins{};
 
-	seqan3::interleaved_xor_filter<> ixf{64, 7000000};
+	seqan3::interleaved_binary_fuse_filter<> iff{64, 7000000};
+	//seqan3::interleaved_xor_filter<> ixf{64, 7000000};
+	
 	bool success = false;
 	while (!success)
 	{
 		size_t bin_idx{0};
-		for (int64_t pos = 199; pos < 200;++pos)
+		for (int64_t pos = 1160; pos < 1170;++pos)
 		{
 			std::vector<size_t> hashes{};
 			hixf::read_from_temp_hash_file(pos, hashes);
 			if (hashes.empty())
 				continue;
 			//bins.emplace_back(hashes);
-			success = ixf.add_bin_elements(bin_idx, hashes);
+			success = iff.add_bin_elements(bin_idx, hashes);
 			std::cout << bin_idx << "\t" << hashes.size() << std::endl;
 			bin_idx++;
 			if (!success)
@@ -438,8 +439,8 @@ int main(int argc, char const **argv)
 		}
 		if (!success)
 		{
-			ixf.clear();
-            ixf.set_seed();
+			iff.clear();
+            iff.set_seed();
 			std::cout << "Reset seed after bin " << bin_idx << std::endl;
 		}
 	}
@@ -454,29 +455,31 @@ int main(int argc, char const **argv)
                     read_hashes.insert(hash);
 	std::vector<size_t> c{};
     std::ranges::copy(read_hashes, std::back_inserter(c));
-	TIXFAgent ixf_count_agent = ixf.counting_agent< uint64_t >();
+	typedef seqan3::interleaved_binary_fuse_filter<>::counting_agent_type<u_int64_t> TIFFAgent;
+	TIFFAgent ixf_count_agent = iff.counting_agent< uint64_t >();
+
 	auto result = ixf_count_agent.bulk_count(c);
     seqan3::debug_stream << "Root result: " << result << "\n";
 	
-*/
+	*/
 
 	hixf::build_arguments args{};
 	args.bin_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/binning.out"};
-	args.out_path = "/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/raptor_kmer.hixf";
+	args.out_path = "/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/raptor_kmer.hiff";
 	args.compute_syncmer = false;
 	hixf::chopper_build(args);
 
-	
-/*
-	hixf::search_arguments search_args{};
-	search_args.index_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/small_test_kmer.hixf"};
+
+
+	/*hixf::search_arguments search_args{};
+	search_args.index_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/raptor_kmer.hixf"};
 	search_args.query_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/files.renamed/GCF_000839085.1_genomic.fna.gz"};
 	search_args.out_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/raptor.hixf_search.out"};
 	search_args.compute_syncmer = false;
 	search_args.threshold = 0.2;
 	hixf::search_hixf(search_args);
-
 */
+
 	return 1;
 	uint64_t q_p = pow (2, 8) - 1;
 	int kmer_size = 16;

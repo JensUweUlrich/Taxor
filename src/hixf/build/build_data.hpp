@@ -4,7 +4,8 @@
 #include <seqan3/std/new>
 
 #include "node_data.hpp"
-#include "hierarchical_interleaved_xor_filter.hpp"
+//#include "hierarchical_interleaved_xor_filter.hpp"
+#include "hierarchical_binary_fuse_filter.hpp"
 
 namespace hixf
 {
@@ -21,7 +22,8 @@ struct build_data
     lemon::ListDigraph ixf_graph{};
     lemon::ListDigraph::NodeMap<node_data> node_map{ixf_graph};
 
-    hierarchical_interleaved_xor_filter<uint8_t> hixf{};
+    //hierarchical_interleaved_xor_filter<uint8_t> hixf{};
+    hierarchical_interleaved_binary_fuse_filter<uint8_t> hixf{};
     std::vector<double> fp_correction{};
 
     size_t request_ixf_idx()

@@ -4,7 +4,8 @@
 //#include <sharg/exceptions.hpp>
 
 #include "build_arguments.hpp"
-#include "hierarchical_interleaved_xor_filter.hpp"
+//#include "hierarchical_interleaved_xor_filter.hpp"
+#include "hierarchical_binary_fuse_filter.hpp"
 #include "strong_types.hpp"
 
 namespace hixf
@@ -13,9 +14,11 @@ namespace hixf
 namespace index_structure
 {
 
-using ixf = seqan3::interleaved_xor_filter<uint8_t>;
+//using ixf = seqan3::interleaved_xor_filter<uint8_t>;
+using ixf = seqan3::interleaved_binary_fuse_filter<uint8_t>;
 //using ibf_compressed = seqan3::interleaved_bloom_filter<seqan3::data_layout::compressed>;
-using hixf = hierarchical_interleaved_xor_filter<uint8_t>;
+//using hixf = hierarchical_interleaved_xor_filter<uint8_t>;
+using hixf = hierarchical_interleaved_binary_fuse_filter<uint8_t>;
 //using hibf_compressed = hierarchical_interleaved_bloom_filter<seqan3::data_layout::compressed>;
 
 /*template <typename return_t, typename input_t>
