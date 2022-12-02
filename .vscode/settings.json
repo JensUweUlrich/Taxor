@@ -77,6 +77,7 @@
         "coroutine": "cpp",
         "csignal": "cpp",
         "source_location": "cpp",
-        "valarray": "cpp"
+        "valarray": "cpp",
+        "cfenv": "cpp"
     }
 }

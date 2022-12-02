@@ -16,7 +16,7 @@ namespace hixf
 {
 
 //template <seqan3::data_layout data_layout_mode>
-/*seqan3::interleaved_xor_filter<> construct_ixf(robin_hood::unordered_flat_set<size_t> & parent_kmers,
+seqan3::interleaved_xor_filter<> construct_ixf(robin_hood::unordered_flat_set<size_t> & parent_kmers,
                                                  robin_hood::unordered_flat_set<size_t> & kmers,
                                                  size_t const number_of_bins,
                                                  lemon::ListDigraph::Node const & node,
@@ -31,22 +31,6 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
                                                size_t const & current_node_ixf_position);
 
 seqan3::interleaved_xor_filter<> construct_ixf(std::vector<robin_hood::unordered_flat_set<size_t>> &node_hashes);
-*/
 
-seqan3::interleaved_binary_fuse_filter<> construct_ixf(robin_hood::unordered_flat_set<size_t> & parent_kmers,
-                                                 robin_hood::unordered_flat_set<size_t> & kmers,
-                                                 size_t const number_of_bins,
-                                                 lemon::ListDigraph::Node const & node,
-                                                 build_data & data,
-                                                 build_arguments const & arguments,
-                                                 bool is_root);
-
-seqan3::interleaved_binary_fuse_filter<> construct_ixf(build_data & data, 
-                                               lemon::ListDigraph::Node const & current_node,
-                                               std::vector<int64_t> & ixf_positions,
-                                               std::vector<robin_hood::unordered_flat_set<size_t>> &node_hashes,
-                                               size_t const & current_node_ixf_position);
-
-seqan3::interleaved_binary_fuse_filter<> construct_ixf(std::vector<robin_hood::unordered_flat_set<size_t>> &node_hashes);
 
 } // namespace raptor::hibf

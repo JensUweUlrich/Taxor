@@ -3,8 +3,7 @@
 
 #include <filesystem>
 
-//#include <seqan3/search/dream_index/interleaved_xor_filter.hpp>
-#include <seqan3/search/dream_index/interleaved_binary_fuse_filter.hpp>
+#include <seqan3/search/dream_index/interleaved_xor_filter.hpp>
 
 #include "index.hpp"
 #include "strong_types.hpp"
@@ -24,12 +23,10 @@ store_index(std::filesystem::path const & path, raptor_index<data_t> const & ind
 //template <seqan3::data_layout layout, typename arguments_t>
 template <typename arguments_t>
 static inline void store_index(std::filesystem::path const & path,
-//                               seqan3::interleaved_xor_filter<> && ixf,
-                               seqan3::interleaved_binary_fuse_filter<> && ixf,
+                               seqan3::interleaved_xor_filter<> && ixf,
                                arguments_t const & arguments)
 {
-//    raptor_index<seqan3::interleaved_xor_filter<>> index{window{arguments.window_size},
-    raptor_index<seqan3::interleaved_binary_fuse_filter<>> index{window{arguments.window_size},
+    raptor_index<seqan3::interleaved_xor_filter<>> index{window{arguments.window_size},
                                                                  arguments.shape,
                                                                  arguments.parts,
                                                                  arguments.compressed,

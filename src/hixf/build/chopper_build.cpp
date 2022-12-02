@@ -21,8 +21,7 @@ void chopper_build(build_arguments const & arguments)
     for (size_t i{0}; i < data.hixf.user_bins.num_user_bins(); ++i)
         bin_path.push_back(std::vector<std::string>{data.hixf.user_bins.filename_of_user_bin(i)});
 
-    //raptor_index<hierarchical_interleaved_xor_filter<uint8_t>> index{window{arguments.window_size},
-    raptor_index<hierarchical_interleaved_binary_fuse_filter<uint8_t>> index{window{arguments.window_size},
+   raptor_index<hierarchical_interleaved_xor_filter<uint8_t>> index{window{arguments.window_size},
                                                                                 arguments.shape,
                                                                                 arguments.kmer_size,
                                                                                 arguments.syncmer_size,

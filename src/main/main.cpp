@@ -9,12 +9,18 @@
 #include <map>
 #include <filesystem>
 
+#include <sys/resource.h>
+#include <sys/time.h>
 
-#include <seqan3/search/views/kmer_hash.hpp>
+#include <seqan3/core/debug_stream.hpp>
 #include <seqan3/alphabet/views/to_char.hpp>
 #include <seqan3/alphabet/views/char_to.hpp>
-#include <seqan3/core/debug_stream.hpp>
+#include <seqan3/argument_parser/all.hpp>
+#include <seqan3/search/views/minimiser_hash.hpp>
+#include <seqan3/search/views/kmer_hash.hpp>
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
+#include <seqan3/search/dream_index/interleaved_binary_fuse_filter.hpp>
+
 
 #include <cereal/archives/binary.hpp>
 
@@ -24,12 +30,13 @@
 #include <syncmer.hpp>
 #include "build.hpp"
 
-#include <build/chopper_build.hpp>
-#include <build/build_arguments.hpp>
+#include "taxor_build.hpp"
+
+
 #include <search/search_arguments.hpp>
 #include <search/search_hixf.hpp>
 #include <build/temp_hash_file.hpp>
-#include <seqan3/search/views/minimiser_hash.hpp>
+
 #include <build/adjust_seed.hpp>
 #include <build/dna4_traits.hpp>
 
@@ -407,18 +414,63 @@ void bins_to_species(multi_interleaved_xor_filter& mixf, std::vector<std::vector
 	}
 }
 
+double cputime(void)
+{
+	struct rusage r;
+	getrusage(RUSAGE_SELF, &r);
+	return r.ru_utime.tv_sec + r.ru_stime.tv_sec + 1e-6 * (r.ru_utime.tv_usec + r.ru_stime.tv_usec);
+}
+
+long getPeakRSS(void)
+{
+	struct rusage r;
+	getrusage(RUSAGE_SELF, &r);
+	return r.ru_maxrss * 1024;
+}
+
 
 
 int main(int argc, char const **argv)
 {
+
+	seqan3::argument_parser top_level_parser{"taxor", argc, argv, seqan3::update_notifications::off,
+                                             {"build", "search"}};
+    top_level_parser.info.version = "1.0.0";
+
+    try
+    {
+        top_level_parser.parse();
+    }
+    catch (seqan3::argument_parser_error const & ext) // the user did something wrong
+    {
+        std::cerr << "[TAXOR ERROR] " << ext.what() << '\n'; // customize your error message
+        return -1;
+    }
+
+    seqan3::argument_parser & sub_parser = top_level_parser.get_sub_parser(); // hold a reference to the sub_parser
+
+    int error_code{};
+
+    if (sub_parser.info.app_name == std::string_view{"taxor-build"})
+        error_code = taxor::build::execute(sub_parser);
+    //else if (sub_parser.info.app_name == std::string_view{"taxor-search"})
+    //    error_code = chopper::count::execute(sub_parser);
+
+	size_t peakSize = getPeakRSS();
+	int peakSizeMByte = (int)(peakSize / (1024 * 1024));
+
+	//std::cout << "Real time : " << ReadBouncerTime.elapsed() << " sec" << std::endl;
+	std::cout << "CPU time  : " << cputime() << " sec" << std::endl;
+	std::cout << "Peak RSS  : " << peakSizeMByte << " MByte" << std::endl;
+
+    return error_code;
 
 	// Print debuging of bulk count method to fid error when building ixf
 	/*using sequence_file_t = seqan3::sequence_file_input<hixf::dna4_traits, seqan3::fields<seqan3::field::seq>>;
 	hixf::build_arguments args{};
 	std::vector<std::vector<size_t>> bins{};
 
-	seqan3::interleaved_binary_fuse_filter<> iff{64, 7000000};
-	//seqan3::interleaved_xor_filter<> ixf{64, 7000000};
+	seqan3::interleaved_xor_filter<> ixf{64, 7000000};
 	
 	bool success = false;
 	while (!success)
@@ -463,13 +515,8 @@ int main(int argc, char const **argv)
 	
 	*/
 
-	hixf::build_arguments args{};
-	args.bin_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/binning.out"};
-	args.out_path = "/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/raptor_kmer.hiff";
-	args.compute_syncmer = false;
-	hixf::chopper_build(args);
-
-
+	
+	//create_layout();
 
 	/*hixf::search_arguments search_args{};
 	search_args.index_file = std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/raptor_kmer.hixf"};
@@ -481,26 +528,8 @@ int main(int argc, char const **argv)
 */
 
 	return 1;
-	uint64_t q_p = pow (2, 8) - 1;
-	int kmer_size = 16;
-	int sync_size = 4;
-	int low_sync_offset = 2;
-	int up_sync_offset = 12;
-	int max_dist = 255;
-	int w_min = kmer_size/(kmer_size-sync_size+1) + low_sync_offset > 1 ? kmer_size/(kmer_size-sync_size+1) + low_sync_offset : 1;
-    int w_max = kmer_size/(kmer_size-sync_size+1) + up_sync_offset;
-    int t_syncmer = (kmer_size-sync_size)/2 + 1;
-
-	//for (int i = 4001 ; i < 5000 ; ++i)
-	//{
-	//	if(construct_and_query_ixf(4500, 100000) < 100000)
-	//construct_and_query_ixf(4363, 100000);
-	//construct_and_query_ixf(4364, 110000);
-	//		std::cout << "Hier : " << i << std::endl;
-	//}
-
 	
-
+/*
 	std::string gtdb_root = "/media/jens/INTENSO/gtdb_genomes_reps_r202";
 	std::string filename = gtdb_root + "/gtdb_reps_accessions_NCBI_name.tsv";
 	std::filesystem::path bin_meta_file = "GTDB_r202_bin_meta.tsv";
@@ -523,33 +552,7 @@ int main(int argc, char const **argv)
 	multi_interleaved_xor_filter mixf = build_ixf_index(species, "GTDB_r202.ixf", bin_meta_file, gtdb_root, kmer_size, sync_size, t_syncmer);	
 	std::cout << "Filter built successfully " << std::endl;
 
-/*
-	std::filesystem::path genomes_path = argv[1];
-	std::vector<std::vector<uint64_t>> genome_hashes{};
-	for (const auto & entry : std::filesystem::directory_iterator(argv[1]))
-	{
-		std::vector<Seqs> ref_seqs{};
-		parse_ref_seqs(ref_seqs, entry.path());
-		uint64_t kmers = 0;
-		uint64_t strobes = 0;
-		std::set<uint64_t> randstrobes{};
-		for (const auto & ref_s : ref_seqs)
-		{
-			std::vector<uint64_t> strobe_hashes = seq_to_randstrobes(kmer_size, w_min, w_max, ref_s.seq, sync_size, t_syncmer, q_p, max_dist);
-			randstrobes.insert(strobe_hashes.begin(), strobe_hashes.end());
-			strobes += strobe_hashes.size();
-			kmers += ref_s.seq.size() - kmer_size + 1;
-		}
-		float ratio = (float) strobes / (float) kmers;
-		std::cout << entry.path() << std::endl;
-		std::cout << "kmers: " << kmers << "\t randstrobes: " << strobes << "\t ratio: " << ratio <<std::endl;
-		genome_hashes.emplace_back(std::move(std::vector<uint64_t>(randstrobes.begin(), randstrobes.end())));
-	}
 
-	seqan3::interleaved_xor_filter<> ixf(genome_hashes);
-	double mbytes = (double) ixf.bit_size() / (double) 8388608;
-	std::cout << "Size of the IXF: " << mbytes << " MBytes" << std::endl;
-*/	
 	std::filesystem::path read_file = argv[1];
 	seqan3::sequence_file_input fin{read_file};
 	
@@ -669,5 +672,6 @@ int main(int argc, char const **argv)
 	seqan3::debug_stream << nr_reads << "\n";
 
 	return 0;
+	*/
 }
 

@@ -9,6 +9,7 @@
                 "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/cereal/include/**",
                 "/home/jens/software/PoreClassify/build/seqan/lemon/include/**",
                 "/home/jens/software/PoreClassify/build/seqan/chopper/include/**",
+                "/home/jens/software/PoreClassify/build/seqan/chopper/lib/simde/simde/**",
                 "/home/jens/software/PoreClassify/src/hixf/**",
                 "/home/jens/software/PoreClassify/src/hashing/**"
             ],
@@ -25,6 +26,7 @@
                     "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/cereal/include",
                     "/home/jens/software/PoreClassify/build/seqan/lemon/include",
                     "/home/jens/software/PoreClassify/build/seqan/chopper/include",
+                    "/home/jens/software/PoreClassify/build/seqan/chopper/lib/simde/simde",
                     "/home/jens/software/PoreClassify/src/hixf",
                     "/home/jens/software/PoreClassify/src/hashing"
                 ]

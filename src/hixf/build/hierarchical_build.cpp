@@ -90,8 +90,7 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> &parent_hashes,
         // only for debugging
         std::vector<size_t> c{};
         std::ranges::copy(test_hashes, std::back_inserter(c));
-        //typedef seqan3::interleaved_xor_filter<>::counting_agent_type< uint64_t > TIXFAgent;
-        typedef seqan3::interleaved_binary_fuse_filter<>::counting_agent_type< uint64_t > TIXFAgent;
+        typedef seqan3::interleaved_xor_filter<>::counting_agent_type< uint64_t > TIXFAgent;  
         for (uint64_t p : investigate)
         {
             if (p == 0)

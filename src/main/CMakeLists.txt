@@ -3,11 +3,13 @@ file(GLOB MAIN_HDRS "*.hpp" "*.h")
 add_executable (${PROJECT_NAME} ${MAIN_HDRS} ${Main_SRC})
 #find_package (Threads)
 
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}/../hashing")
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/../hashing"
+					"${CMAKE_CURRENT_BINARY_DIR}/../seqan/chopper/lib/simde/simde")
 
 target_include_directories(${PROJECT_NAME} INTERFACE 
 	${CMAKE_CURRENT_BINARY_DIR}/../hashing
 	${CMAKE_CURRENT_BINARY_DIR}/../hixf
+	${CMAKE_CURRENT_BINARY_DIR}/../seqan/chopper/lib/simde/simde
 	)
 
 # using seqan3

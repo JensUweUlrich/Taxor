@@ -11,8 +11,7 @@ namespace hixf
 
 //template <seqan3::data_layout data_layout_mode>
 // @deprecated
-//seqan3::interleaved_xor_filter<> construct_ixf(robin_hood::unordered_flat_set<size_t> & parent_hashes,
-seqan3::interleaved_binary_fuse_filter<> construct_ixf(robin_hood::unordered_flat_set<size_t> & parent_hashes,
+seqan3::interleaved_xor_filter<> construct_ixf(robin_hood::unordered_flat_set<size_t> & parent_hashes,
                                                  robin_hood::unordered_flat_set<size_t> & hashes,
                                                  size_t const number_of_bins,
                                                  lemon::ListDigraph::Node const & node,
@@ -26,16 +25,14 @@ seqan3::interleaved_binary_fuse_filter<> construct_ixf(robin_hood::unordered_fla
     //double const bin_bits{static_cast<double>(bin_size_in_bits(arguments, kmers_per_bin))};
     //seqan3::bin_size const bin_size{static_cast<size_t>(std::ceil(bin_bits * data.fp_correction[number_of_bins]))};
     //seqan3::bin_count const bin_count{node_data.number_of_technical_bins};
-    //seqan3::interleaved_xor_filter<> ixf{node_data.number_of_technical_bins, hashes_per_bin};
-    seqan3::interleaved_binary_fuse_filter<> ixf{node_data.number_of_technical_bins, hashes_per_bin};
+    seqan3::interleaved_xor_filter<> ixf{node_data.number_of_technical_bins, hashes_per_bin};
 
     insert_into_ixf(parent_hashes, hashes, number_of_bins, node_data.max_bin_index, ixf, is_root);
 
     return ixf;
 }
 
-//seqan3::interleaved_xor_filter<> construct_ixf(std::vector<robin_hood::unordered_flat_set<size_t>> &node_hashes)
-seqan3::interleaved_binary_fuse_filter<> construct_ixf(std::vector<robin_hood::unordered_flat_set<size_t>> &node_hashes)
+seqan3::interleaved_xor_filter<> construct_ixf(std::vector<robin_hood::unordered_flat_set<size_t>> &node_hashes)
 {
     std::vector<std::vector<size_t>> tmp{};
     for (auto hash_bin : node_hashes)
@@ -44,15 +41,13 @@ seqan3::interleaved_binary_fuse_filter<> construct_ixf(std::vector<robin_hood::u
         std::ranges::copy(hash_bin, std::back_inserter(c));
         tmp.emplace_back(c);
     }
-    //seqan3::interleaved_xor_filter<> ixf{tmp};
-    seqan3::interleaved_binary_fuse_filter<> ixf{tmp};
+    seqan3::interleaved_xor_filter<> ixf{tmp};
 
     return ixf;
 }
 
 
-//seqan3::interleaved_xor_filter<> construct_ixf(build_data & data, 
-seqan3::interleaved_binary_fuse_filter<> construct_ixf(build_data & data, 
+seqan3::interleaved_xor_filter<> construct_ixf(build_data & data, 
                                                lemon::ListDigraph::Node const & current_node,
                                                std::vector<int64_t> & ixf_positions,
                                                std::vector<robin_hood::unordered_flat_set<size_t>> &node_hashes,
@@ -60,8 +55,7 @@ seqan3::interleaved_binary_fuse_filter<> construct_ixf(build_data & data,
 {
     auto &current_node_data = data.node_map[current_node];
     // create empty IXF based on number of technical bins and max number of hashes per bin
-    //seqan3::interleaved_xor_filter<> ixf{current_node_data.number_of_technical_bins, current_node_data.max_bin_hashes};
-    seqan3::interleaved_binary_fuse_filter<> ixf{current_node_data.number_of_technical_bins, current_node_data.max_bin_hashes};
+    seqan3::interleaved_xor_filter<> ixf{current_node_data.number_of_technical_bins, current_node_data.max_bin_hashes};
     // first iterate over all child IXFs 
     
     bool success{false};

@@ -4,8 +4,7 @@
 #include "create_ixfs_from_chopper_pack.hpp"
 #include "hierarchical_build.hpp"
 #include "read_chopper_pack_file.hpp"
-//#include <seqan3/search/dream_index/interleaved_xor_filter.hpp>
-#include <seqan3/search/dream_index/interleaved_binary_fuse_filter.hpp>
+#include <seqan3/search/dream_index/interleaved_xor_filter.hpp>
 
 #include <seqan3/search/views/minimiser_hash.hpp>
 #include <build/adjust_seed.hpp>
@@ -24,8 +23,7 @@ void create_ixfs_from_chopper_pack(build_data& data, build_arguments const & arg
     size_t const t_max{data.node_map[root].number_of_technical_bins};
 
     hierarchical_build(root_hashes, root, data, arguments, true, false);
-    //typedef seqan3::interleaved_xor_filter<>::counting_agent_type< uint64_t > TIXFAgent;
-    typedef seqan3::interleaved_binary_fuse_filter<>::counting_agent_type< uint64_t > TIXFAgent;
+    typedef seqan3::interleaved_xor_filter<>::counting_agent_type< uint64_t > TIXFAgent;
     TIXFAgent ixf_count_agent = data.hixf.ixf_vector[0].counting_agent< uint64_t >();
     robin_hood::unordered_flat_set<size_t> read_hashes{};
     using sequence_file_t = seqan3::sequence_file_input<hixf::dna4_traits, seqan3::fields<seqan3::field::seq>>;
