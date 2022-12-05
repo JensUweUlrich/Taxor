@@ -37,13 +37,14 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::build::con
                       "file [INPUT-PREFIX].count exists. It needs to be tab-separated and consist of two columns: "
                       "\"[filepath] [tab] [weight/count]\".",*/
                       seqan3::option_spec::required);
-    parser.add_list_item("", "Example count file:");
+    parser.add_list_item("", "Example file:");
     parser.add_list_item("", "```");
-    parser.add_list_item("", "/absolute/path/to/file1.fasta     500");
-    parser.add_list_item("", "/absolute/path/to/file2.fa.gz     600");
+    parser.add_list_item("", "GCF_000839185.1 https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/839/185/GCF_000839185.1_ViralProj14174 Cowpox virus    k__Viruses;p__Nucleocytoviricota;c__Pokkesviricetes;o__Chitovirales;f__Poxviridae;g__Orthopoxvirus;s__Cowpox virus");
+    parser.add_list_item("", "GCF_000860085.1 https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/860/085/GCF_000860085.1_ViralProj15241 Vaccinia virus  k__Viruses;p__Nucleocytoviricota;c__Pokkesviricetes;o__Chitovirales;f__Poxviridae;g__Orthopoxvirus;s__Vaccinia virus");
     parser.add_list_item("", "```");
 
-    
+    parser.add_option(config.input_sequence_folder, '\0', "input-sequence_dir", "directory containing the fasta reference files");
+
     parser.add_option(config.output_file_name, '\0', "output-filename", "A file name for the resulting index.");
 
     parser.add_option(config.kmer_size, '\0', "kmer-size", "size of kmers used for index construction",
@@ -257,6 +258,8 @@ int execute(seqan3::argument_parser & parser)
         std::cerr << "[TAXOR BUILD ERROR] " << ext.what() << '\n';
         return -1;
     }
+
+
 
     create_layout(config);
 

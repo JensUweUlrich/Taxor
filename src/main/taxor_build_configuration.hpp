@@ -8,6 +8,7 @@ namespace taxor::build
 struct configuration
 {
     std::string input_file_name{}; // provided by user
+    std::string input_sequence_folder{};
     std::string output_file_name{}; // provided by user
     uint8_t threads{1u};
     uint8_t kmer_size{20u};

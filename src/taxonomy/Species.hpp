@@ -4,17 +4,24 @@
 #include <string>
 #include <seqan3/core/concept/cereal.hpp>
 
+namespace taxor::taxonomy
+{
+
 class Species
 {
 
 public:
-	std::string name;
 	std::string organism_name;
-	std::string accession_id;
-	std::string taxonomy;
-    uint16_t filter_index = UINT16_MAX;
-    uint64_t first_bin = UINT64_MAX;
-    uint64_t last_bin = UINT64_MAX;
+	std::string accession_id; // ncbi accession
+    std::string file_stem;
+    std::string species;
+    std::string genus;
+    std::string family;
+    std::string order;
+    std::string class_tax;
+    std::string phylum;
+    std::string kingdom;
+    uint16_t user_bin;
 
 
     /*!\name Constructors, destructor and assignment
@@ -36,13 +43,17 @@ public:
     template <seqan3::cereal_archive archive_t>
     void CEREAL_SERIALIZE_FUNCTION_NAME(archive_t & archive)
     {
-        archive(name);
         archive(organism_name);
         archive(accession_id);
-        archive(taxonomy);
-        archive(filter_index);
-        archive(first_bin);
-        archive(last_bin);
+        archive(species);
+        archive(genus);
+        archive(family);
+        archive(order);
+        archive(class_tax);
+        archive(phylum);
+        archive(kingdom);
+        archive(user_bin);
     }
 
 };
+}

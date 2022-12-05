@@ -53,6 +53,7 @@ endif()
 
 add_subdirectory(seqan)
 add_subdirectory(hashing)
+add_subdirectory(taxonomy)
 add_subdirectory(hixf)
 add_subdirectory(main)
 
