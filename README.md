@@ -17,7 +17,7 @@ genome_updater.sh \
 mkdir -p taxdump
 tar -zxvf taxdump.tar.gz -C taxdump
 
-cut -f 1,6 ../assembly_summary.txt \
+cut -f 1,6,20 ../assembly_summary.txt \
 | taxonkit lineage -i 2 -r -n -L --data-dir taxdump \
 | taxonkit reformat -I 2 -P --data-dir taxdump \
 | cut -f 1,3,4,5 > refseq_accessions_taxonomy.csv
