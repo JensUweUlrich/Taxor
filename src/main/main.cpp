@@ -31,7 +31,7 @@
 //#include "build.hpp"
 
 #include "taxor_build.hpp"
-
+#include "taxor_search.hpp"
 
 #include <search/search_arguments.hpp>
 #include <search/search_hixf.hpp>
@@ -83,8 +83,8 @@ int main(int argc, char const **argv)
 
     if (sub_parser.info.app_name == std::string_view{"taxor-build"})
         error_code = taxor::build::execute(sub_parser);
-    //else if (sub_parser.info.app_name == std::string_view{"taxor-search"})
-    //    error_code = chopper::count::execute(sub_parser);
+    else if (sub_parser.info.app_name == std::string_view{"taxor-search"})
+        error_code = taxor::search::execute(sub_parser);
 
 	size_t peakSize = getPeakRSS();
 	int peakSizeMByte = (int)(peakSize / (1024 * 1024));

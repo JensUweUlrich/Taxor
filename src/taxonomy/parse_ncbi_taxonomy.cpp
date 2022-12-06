@@ -19,7 +19,7 @@ namespace taxor::taxonomy
 			
 			std::string tmp;
 			std::stringstream taxonomy(line[3]);
-			while (getline(taxonomy, tmp, ';'))
+			while (getline(taxonomy, tmp, '\t'))
 			{
 				if (tmp.substr(0, 1).compare("s") == 0)
 					sp.species = tmp.substr(3);
@@ -36,14 +36,13 @@ namespace taxor::taxonomy
 				else if(tmp.substr(0, 1).compare("k") == 0)
 					sp.kingdom = tmp.substr(3);
 			}
-
 			std::size_t found = line[1].find_last_of("/\\");
 			if (found != std::string::npos)
 				sp.file_stem = line[1].substr(found+1);
 			
-		 
 			org_list.emplace_back(std::move(sp));
 	 	}
+		return std::move(org_list);
     }
     
 } // namespace taxor::taxonomy

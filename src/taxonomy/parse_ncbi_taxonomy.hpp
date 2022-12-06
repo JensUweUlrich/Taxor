@@ -6,6 +6,6 @@ namespace taxor::taxonomy
 {
     
 
-    std::vector<Species> parse_refseq_assembly_file(std::string const filepath);
+    std::vector<Species> parse_refseq_taxonomy_file(std::string const filepath);
 
 }

@@ -11,7 +11,8 @@
                 "/home/jens/software/PoreClassify/build/seqan/chopper/include/**",
                 "/home/jens/software/PoreClassify/build/seqan/chopper/lib/simde/simde/**",
                 "/home/jens/software/PoreClassify/src/hixf/**",
-                "/home/jens/software/PoreClassify/src/hashing/**"
+                "/home/jens/software/PoreClassify/src/hashing/**",
+                "/home/jens/software/PoreClassify/src/taxonomy/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++",
@@ -28,7 +29,8 @@
                     "/home/jens/software/PoreClassify/build/seqan/chopper/include",
                     "/home/jens/software/PoreClassify/build/seqan/chopper/lib/simde/simde",
                     "/home/jens/software/PoreClassify/src/hixf",
-                    "/home/jens/software/PoreClassify/src/hashing"
+                    "/home/jens/software/PoreClassify/src/hashing",
+                    "/home/jens/software/PoreClassify/src/taxonomy"
                 ]
             },
             "mergeConfigurations": false,

@@ -4,6 +4,7 @@
 #include <chopper/detail_apply_prefix.hpp>
 #include <chopper/count/check_filenames.hpp>
 #include <chopper/count/count_kmers.hpp>
+#include <chopper/count/output.hpp>
 #include <chopper/layout/configuration.hpp>
 #include <chopper/layout/data_store.hpp>
 #include <chopper/layout/filenames_data_input.hpp>
@@ -12,6 +13,11 @@
 
 #include <build/chopper_build.hpp>
 #include <build/build_arguments.hpp>
+#include <build/dna4_traits.hpp>
+
+#include <syncmer.hpp>
+
+#include <parse_ncbi_taxonomy.hpp>
 
 #include "taxor_build.hpp"
 #include "taxor_build_configuration.hpp"
@@ -179,24 +185,91 @@ size_t determine_best_number_of_technical_bins(chopper::layout::data_store & dat
     return max_hixf_id;
 }
 
-
-void create_layout(taxor::build::configuration const taxor_config)
+inline auto create_filename_clusters(taxor::build::configuration const taxor_config, std::vector<taxonomy::Species> &orgs)
 {
-	chopper::count::configuration config{};
-	config.data_file = taxor_config.input_file_name;
-	config.k = taxor_config.kmer_size;
-	config.threads = taxor_config.threads;
-	config.output_prefix = "chopper";
-	/*auto filename_clusters = chopper::count::read_data_file(config);
+    robin_hood::unordered_map<std::string, std::vector<std::string>> filename_clusters;
 
-	chopper::detail::apply_prefix(config.output_prefix, config.count_filename, config.sketch_directory);
-    chopper::count::check_filenames(filename_clusters, config);
-    chopper::count::count_kmers(filename_clusters, config);
-*/
+    for (auto& species : orgs)
+    {
+        filename_clusters[species.accession_id].push_back(taxor_config.input_sequence_folder + "/" + species.file_stem + "_genomic.fna.gz");
+    }
+
+    return filename_clusters;
+}
+
+inline void count_syncmers(robin_hood::unordered_map<std::string, std::vector<std::string>> const & filename_clusters,
+                           chopper::count::configuration const & count_config,
+                           taxor::build::configuration const taxor_config)
+{
+    using traits_type = seqan3::sequence_file_input_default_traits_dna;
+    using sequence_file_t = seqan3::sequence_file_input<traits_type, seqan3::fields<seqan3::field::seq>>;
+
+    uint8_t t_syncmer = ceil((taxor_config.kmer_size - taxor_config.syncmer_size) / 2) + 1;
+
+    std::ofstream fout{count_config.count_filename};
+
+    if (!fout.good())
+        throw std::runtime_error{"Could not open file" + count_config.count_filename.string() + " for reading."};
+
+    // create the hll dir if it doesn't already exist
+    if (!count_config.disable_sketch_output)
+        std::filesystem::create_directory(count_config.sketch_directory);
+
+    // copy filename clusters to vector
+    std::vector<std::pair<std::string, std::vector<std::string>>> cluster_vector{};
+    for (auto const & cluster : filename_clusters)
+        cluster_vector.emplace_back(cluster.first, cluster.second);
+
+    #pragma omp parallel for schedule(static) num_threads(count_config.threads)
+    for (size_t i = 0; i < cluster_vector.size(); ++i)
+    {
+        chopper::sketch::hyperloglog sketch(count_config.sketch_bits);
+
+        std::vector<seqan3::dna5_vector> refs{};
+        for (auto const & filename : cluster_vector[i].second)
+        {
+            for (auto && [seq] : sequence_file_t{filename})
+            {
+			    std::vector<uint64_t> syncmer_hashes = hashing::seq_to_syncmers(taxor_config.kmer_size, seq, taxor_config.syncmer_size, t_syncmer);
+                for (auto &hash : syncmer_hashes)
+                    sketch.add(hash);
+            }
+		}
+        //process_sequence_files(cluster_vector[i].second, config, sketch);
+
+        // print either the exact or the approximate count, depending on exclusively_hlls
+        uint64_t const weight = sketch.estimate();
+
+        #pragma omp critical
+        chopper::count::write_count_file_line(cluster_vector[i], weight, fout);
+
+        if (!count_config.disable_sketch_output)
+            chopper::count::write_sketch_file(cluster_vector[i], sketch, count_config);
+    }
+}
+
+
+void create_layout(taxor::build::configuration const taxor_config, std::vector<taxonomy::Species> &orgs)
+{
+	chopper::count::configuration count_config{};
+	//config.data_file = taxor_config.input_file_name;
+	count_config.k = taxor_config.kmer_size;
+	count_config.threads = taxor_config.threads;
+	count_config.output_prefix = "chopper";
+    auto filename_clusters = create_filename_clusters(taxor_config, orgs);
+	//auto filename_clusters = chopper::count::read_data_file(config);
+
+	chopper::detail::apply_prefix(count_config.output_prefix, count_config.count_filename, count_config.sketch_directory);
+    chopper::count::check_filenames(filename_clusters, count_config);
+    if (taxor_config.use_syncmer)
+        count_syncmers(filename_clusters, count_config, taxor_config);
+    else
+        chopper::count::count_kmers(filename_clusters, count_config);
+
 	chopper::layout::configuration layout_config;
     chopper::layout::data_store data;
 
-	layout_config.input_prefix = config.output_prefix;
+	layout_config.input_prefix = count_config.output_prefix;
 	
 	chopper::detail::apply_prefix(layout_config.input_prefix, layout_config.count_filename, layout_config.sketch_directory);
     // Read in the data file containing file paths, kmer counts and additional information.
@@ -235,6 +308,8 @@ void build_hixf(taxor::build::configuration const config)
     args.syncmer_size = config.syncmer_size;
     args.threads = config.threads;
 	args.compute_syncmer = config.use_syncmer;
+    if (config.use_syncmer)
+        args.t_syncmer = ceil((args.kmer_size - args.syncmer_size) / 2) + 1;
 	hixf::chopper_build(args);
 }
 
@@ -259,9 +334,9 @@ int execute(seqan3::argument_parser & parser)
         return -1;
     }
 
+    std::vector<taxonomy::Species> orgs = taxonomy::parse_refseq_taxonomy_file(config.input_file_name);
 
-
-    create_layout(config);
+    create_layout(config, orgs);
 
     build_hixf(config);
 
