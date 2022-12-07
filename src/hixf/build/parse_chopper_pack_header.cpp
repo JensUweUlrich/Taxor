@@ -49,18 +49,17 @@ size_t parse_chopper_pack_header(lemon::ListDigraph & ixf_graph,
            && std::string_view{line}.substr(0, 1) == chopper::prefix::header
            && std::string_view{line}.substr(1, 1) == chopper::prefix::header_config)
         ; // skip config in header
-
+    
     assert(line[0] == '#');                                    // we are reading header lines
     assert(line.substr(1, hixf_prefix.size()) == hixf_prefix); // first line should always be High level IBF
 
     // parse High Level max bin index
     assert(line.substr(hixf_prefix.size() + 2, 11) == "max_bin_id:");
     std::string_view const hixf_max_bin_str{line.begin() + 27, line.end()};
-    
     auto high_level_node = ixf_graph.addNode(); // high-level node = root node
-   
+    
     node_map.set(high_level_node, {0, parse_first_bin(hixf_max_bin_str), 0, 0, 0, lemon::INVALID, {}});
-   
+
     std::vector<std::pair<std::vector<size_t>, size_t>> header_records{};
     
     // first read and parse header records, in order to sort them before adding them to the graph

@@ -3,14 +3,14 @@
 
 #include <chrono>
 
-#include "search_arguments.hpp"
-#include <build/index.hpp>
+#include <search/search_arguments.hpp>
+#include "index.hpp"
 
-namespace hixf
+namespace taxor
 {
 
 template <typename index_t>
-void load_index(index_t & index, search_arguments const & arguments, size_t const part, double & index_io_time)
+void load_index(index_t & index, hixf::search_arguments const & arguments, size_t const part, double & index_io_time)
 {
     std::filesystem::path index_file{arguments.index_file};
     index_file += "_" + std::to_string(part);
@@ -19,7 +19,7 @@ void load_index(index_t & index, search_arguments const & arguments, size_t cons
 }
 
 template <typename index_t>
-void load_index(index_t & index, search_arguments const & arguments, double & index_io_time)
+void load_index(index_t & index, hixf::search_arguments const & arguments, double & index_io_time)
 {
     load_index(index, arguments.index_file, index_io_time);
 }

@@ -1,3 +1,5 @@
+#include <lemon/list_graph.h> /// Must be first include.
+
 #include <iostream>
 
 #include <chopper/count/read_data_file.hpp>
@@ -11,7 +13,9 @@
 #include <chopper/layout/hierarchical_binning.hpp>
 #include <chopper/layout/output.hpp>
 
-#include <build/chopper_build.hpp>
+#include <build/create_ixfs_from_chopper_pack.hpp>
+#include <build/build_data.hpp>
+#include <build/strong_types.hpp>
 #include <build/build_arguments.hpp>
 #include <build/dna4_traits.hpp>
 
@@ -20,6 +24,8 @@
 #include <parse_ncbi_taxonomy.hpp>
 
 #include "taxor_build.hpp"
+#include "index.hpp"
+#include "store_index.hpp"
 #include "taxor_build_configuration.hpp"
 
 namespace taxor::build
@@ -185,13 +191,17 @@ size_t determine_best_number_of_technical_bins(chopper::layout::data_store & dat
     return max_hixf_id;
 }
 
-inline auto create_filename_clusters(taxor::build::configuration const taxor_config, std::vector<taxonomy::Species> &orgs)
+inline auto create_filename_clusters(taxor::build::configuration const taxor_config, 
+                                     std::vector<taxonomy::Species> &orgs,
+                                     std::map<std::string, uint64_t> &user_bin_map)
 {
     robin_hood::unordered_map<std::string, std::vector<std::string>> filename_clusters;
 
-    for (auto& species : orgs)
+    for (uint64_t org_index = 0; org_index < orgs.size(); ++org_index) //auto& species : orgs)
     {
-        filename_clusters[species.accession_id].push_back(taxor_config.input_sequence_folder + "/" + species.file_stem + "_genomic.fna.gz");
+        std::string filepath = taxor_config.input_sequence_folder + "/" + orgs[org_index].file_stem + "_genomic.fna.gz";
+        filename_clusters[orgs.at(org_index).accession_id].push_back(filepath);
+        user_bin_map.emplace(std::make_pair(filepath, org_index));
     }
 
     return filename_clusters;
@@ -249,14 +259,16 @@ inline void count_syncmers(robin_hood::unordered_map<std::string, std::vector<st
 }
 
 
-void create_layout(taxor::build::configuration const taxor_config, std::vector<taxonomy::Species> &orgs)
+void create_layout(taxor::build::configuration const taxor_config, 
+                   std::vector<taxonomy::Species> &orgs,
+                   std::map<std::string, uint64_t> &user_bin_map)
 {
 	chopper::count::configuration count_config{};
 	//config.data_file = taxor_config.input_file_name;
 	count_config.k = taxor_config.kmer_size;
 	count_config.threads = taxor_config.threads;
 	count_config.output_prefix = "chopper";
-    auto filename_clusters = create_filename_clusters(taxor_config, orgs);
+    auto filename_clusters = create_filename_clusters(taxor_config, orgs, user_bin_map);
 	//auto filename_clusters = chopper::count::read_data_file(config);
 
 	chopper::detail::apply_prefix(count_config.output_prefix, count_config.count_filename, count_config.sketch_directory);
@@ -298,9 +310,11 @@ void create_layout(taxor::build::configuration const taxor_config, std::vector<t
 
 }
 
-void build_hixf(taxor::build::configuration const config)
+void build_hixf(taxor::build::configuration const config, 
+                std::vector<taxonomy::Species> &orgs,
+                std::map<std::string, uint64_t> &user_bin_map)
 {
-
+  
 	hixf::build_arguments args{};
 	args.bin_file = std::filesystem::path{"binning.out"};
 	args.out_path = config.output_file_name;
@@ -310,7 +324,31 @@ void build_hixf(taxor::build::configuration const config)
 	args.compute_syncmer = config.use_syncmer;
     if (config.use_syncmer)
         args.t_syncmer = ceil((args.kmer_size - args.syncmer_size) / 2) + 1;
-	hixf::chopper_build(args);
+	
+    hixf::build_data data{};
+   
+    hixf::create_ixfs_from_chopper_pack(data, args);
+    
+    std::vector<std::vector<std::string>> bin_path{};
+    for (size_t i{0}; i < data.hixf.user_bins.num_user_bins(); ++i)
+    {
+        bin_path.push_back(std::vector<std::string>{data.hixf.user_bins.filename_of_user_bin(i)});
+        orgs.at(user_bin_map[data.hixf.user_bins.filename_of_user_bin(i)]).user_bin = i;
+    }
+
+   taxor_index<hixf::hierarchical_interleaved_xor_filter<uint8_t>> index{hixf::window{args.window_size},
+                                                                                args.shape,
+                                                                                args.kmer_size,
+                                                                                args.syncmer_size,
+                                                                                args.t_syncmer,
+                                                                                args.parts,
+                                                                                args.compute_syncmer,
+                                                                                args.compressed,
+                                                                                bin_path,
+                                                                                orgs,
+                                                                                std::move(data.hixf)};
+    
+    store_index(args.out_path, index, args);
 }
 
 
@@ -335,10 +373,11 @@ int execute(seqan3::argument_parser & parser)
     }
 
     std::vector<taxonomy::Species> orgs = taxonomy::parse_refseq_taxonomy_file(config.input_file_name);
+    // map filename to index of species in orgs vector 
+    std::map<std::string, uint64_t> user_bin_map{};
+    create_layout(config, orgs, user_bin_map);
 
-    create_layout(config, orgs);
-
-    build_hixf(config);
+    build_hixf(config, orgs, user_bin_map);
 
 
     return 0;

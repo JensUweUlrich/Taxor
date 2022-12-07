@@ -27,20 +27,9 @@
 #include <zlib.h>
 #include "StopClock.hpp"
 
-#include <syncmer.hpp>
-//#include "build.hpp"
-
 #include "taxor_build.hpp"
 #include "taxor_search.hpp"
 
-#include <search/search_arguments.hpp>
-#include <search/search_hixf.hpp>
-#include <build/temp_hash_file.hpp>
-
-#include <build/adjust_seed.hpp>
-#include <build/dna4_traits.hpp>
-
-#include <robin_hood.h>
 
 using namespace seqan3::literals;
 
