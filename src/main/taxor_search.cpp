@@ -1,3 +1,5 @@
+#include <seqan3/core/debug_stream.hpp>
+
 #include <seqan3/search/views/minimiser_hash.hpp>
 
 #include <search/search_arguments.hpp>
@@ -68,20 +70,22 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
     double index_io_time{0.0};
     double reads_io_time{0.0};
     double compute_time{0.0};
-    hixf::threshold thresholder{};
-
+    hixf::threshold thresholder;
+    // map hixf user bin to species list index position
+    std::map<size_t, size_t> user_bin_index{};
     auto cereal_worker = [&]()
     {
         load_index(index, arguments, index_io_time);
         arguments.compute_syncmer = index.use_syncmer();
+        arguments.shape = index.shape();
+        arguments.shape_size = index.kmer_size();
         // TODO: thresholding should be set based on used pattern
         if (arguments.compute_syncmer)
             arguments.threshold = 0.2;
-        else
-            arguments.threshold = 0.95;
-        std::cout << "Index loaded" << std::endl;
-        thresholder = arguments.make_threshold_parameters();
-        std::cout << "Thresholder created" << std::endl;
+        hixf::threshold_parameters param = arguments.make_threshold_parameters();
+        thresholder = hixf::threshold{param};
+        for (size_t i = 0; i < index.species().size(); ++i)
+            user_bin_index.emplace(std::make_pair(index.species().at(i).user_bin, i));
     };
     auto cereal_handle = std::async(std::launch::async, cereal_worker);
     seqan3::sequence_file_input<hixf::dna4_traits, seqan3::fields<seqan3::field::id, seqan3::field::seq>> fin{
@@ -109,7 +113,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
             synced_out << line;
             ++position;
         }
-        synced_out << "#QUERY_NAME\tUSER_BINS\n";
+        synced_out << "#QUERY_NAME\tREFERENCE_NAME\n";
     }
 
     
@@ -127,7 +131,6 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         auto hash_adaptor = seqan3::views::minimiser_hash(arguments.shape,
                                                           seqan3::window_size{arguments.window_size},
                                                           seqan3::seed{hixf::adjust_seed(arguments.shape_weight)});
-        std::cout << "start iterating over reads" << std::endl;
 
         for (auto && [id, seq] : records | seqan3::views::slice(start, end))
         {
@@ -147,21 +150,31 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
                 hashes.assign(minimiser_view.begin(), minimiser_view.end());
             }
             size_t const hash_count{hashes.size()};
-            size_t const threshold = thresholder.get(hash_count);
+            size_t threshold = thresholder.get(hash_count);
             std::cout << "Threshold: " << threshold << std::endl;
             std::cout << "Minimizer count: " << hash_count << std::endl;
 
-                auto & result = counter.bulk_contains(hashes, threshold); // Results contains user bin IDs
+            auto & result = counter.bulk_contains(hashes, threshold); // Results contains user bin IDs
+            // write one line per reference match 
+            if (result.empty())
+            {
+                result_string += id + '\t';
+                result_string += "-\n";
+            }
+            else{
                 for (auto && count : result)
                 {
-                    result_string += std::to_string(count);
-                    result_string += ',';
+                    result_string += id + '\t';
+                    result_string += index.species().at(user_bin_index[count]).organism_name;
+                    result_string += '\n';
                 }
-
+            }
+            /*
             if (auto & last_char = result_string.back(); last_char == ',')
                 last_char = '\n';
             else
                 result_string += '\n';
+            */
             synced_out.write(result_string);
             break;
         }

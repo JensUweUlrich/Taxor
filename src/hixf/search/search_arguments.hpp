@@ -30,9 +30,10 @@ struct search_arguments
 
     // Related to thresholding
     double tau{0.9999};
-    double threshold{std::numeric_limits<double>::quiet_NaN()};
+    double threshold{-1.0};
     double p_max{0.15};
     double fpr{0.05};
+    double seq_error_rate{0.04};
     uint64_t pattern_size{};
     hixf::pattern_size pattern_size_strong{};
     uint8_t errors{0};
@@ -50,18 +51,20 @@ struct search_arguments
     bool is_hixf{true};
     bool cache_thresholds{false};
 
-    hixf::threshold_parameters make_threshold_parameters() const noexcept
+    hixf::threshold_parameters make_threshold_parameters() noexcept
     {
-        return {.window_size{window_size},
-                .shape{shape},
-                .pattern_size{pattern_size},
-                .errors{errors},
-                .percentage{threshold},
-                .p_max{p_max},
-                .fpr{fpr},
-                .tau{tau},
-                .cache_thresholds{cache_thresholds},
-                .output_directory{index_file.parent_path()}};
+        return hixf::threshold_parameters{window_size,
+                shape,
+                shape_size,
+                pattern_size,
+                errors,
+                threshold,
+                p_max,
+                fpr,
+                tau,
+                seq_error_rate,
+                cache_thresholds,
+                index_file.parent_path()};
     }
 };
 

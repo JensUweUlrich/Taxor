@@ -11,9 +11,9 @@
 namespace taxor
 {
 
-template <typename data_t, typename arguments_t>
+template <typename data_t>
 static inline void
-store_index(std::filesystem::path const & path, taxor_index<data_t> const & index, arguments_t const &)
+store_index(std::filesystem::path const & path, taxor_index<data_t> const & index)
 {
     std::ofstream os{path, std::ios::binary};
     cereal::BinaryOutputArchive oarchive{os};

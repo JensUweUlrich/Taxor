@@ -55,7 +55,7 @@ public:
 
     explicit taxor_index(hixf::window const window_size,
                          seqan3::shape const shape,
-                         u_int8_t kmer_size,
+                         uint8_t kmer_size,
                          uint8_t syncmer_size,
                          uint8_t t_syncmer,
                          uint8_t const parts,

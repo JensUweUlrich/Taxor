@@ -348,7 +348,7 @@ void build_hixf(taxor::build::configuration const config,
                                                                                 orgs,
                                                                                 std::move(data.hixf)};
     
-    store_index(args.out_path, index, args);
+    store_index(args.out_path, index);
 }
 
 
