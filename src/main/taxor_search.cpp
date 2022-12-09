@@ -97,6 +97,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
     hixf::sync_out synced_out{arguments.out_file};
 
     {
+        /*
         size_t position{};
         std::string line{};
         for (auto const & file_list : arguments.bin_path)
@@ -113,7 +114,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
             line.back() = '\n';
             synced_out << line;
             ++position;
-        }
+        }*/
         synced_out << "#QUERY_NAME\tREFERENCE_NAME\n";
     }
 
@@ -136,8 +137,8 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         for (auto && [id, seq] : records | seqan3::views::slice(start, end))
         {
             result_string.clear();
-            result_string += id;
-            result_string += '\t';
+            //result_string += id;
+            //result_string += '\t';
 
             if (arguments.compute_syncmer)
             {
@@ -151,6 +152,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
                 hashes.assign(minimiser_view.begin(), minimiser_view.end());
             }
             size_t const hash_count{hashes.size()};
+            size_t fp_correction = hash_count * 0.003;
             size_t threshold = thresholder.get(hash_count, (double)hash_count / ((double)seq.size() - (double)index.kmer_size() + 1.0));
             std::cout << "Threshold: " << threshold << std::endl;
             std::cout << "Minimizer count: " << hash_count << std::endl;
@@ -166,7 +168,9 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
                 for (auto && count : result)
                 {
                     result_string += id + '\t';
-                    result_string += index.species().at(user_bin_index[count]).organism_name;
+                    result_string += index.species().at(user_bin_index[count.first]).organism_name;
+                    result_string += '\t';
+                    result_string += std::to_string(count.second-fp_correction);
                     result_string += '\n';
                 }
             }

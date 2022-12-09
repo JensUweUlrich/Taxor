@@ -297,19 +297,16 @@ private:
     void bulk_contains_impl(value_range_t && values, int64_t const ixf_idx, size_t const threshold)
     {
        
-        auto agent = hixf_ptr->ixf_vector[ixf_idx].template counting_agent<uint16_t>();
+        auto agent = hixf_ptr->ixf_vector[ixf_idx].template counting_agent<uint32_t>();
         auto & result = agent.bulk_count(values);
-        uint16_t sum{};
-        uint16_t max_sum{0};
+        uint32_t sum{};
+        //uint32_t max_sum{0};
         
         for (size_t bin{}; bin < result.size(); ++bin)
         {
             sum += result[bin];
 
-            auto const current_filename_index = hixf_ptr->user_bins.filename_index(ixf_idx, bin);
-
-            //if (sum >= 50)
-                
+            auto const current_filename_index = hixf_ptr->user_bins.filename_index(ixf_idx, bin);            
 
             if (current_filename_index < 0) // merged bin
             {
@@ -321,12 +318,12 @@ private:
                      current_filename_index != hixf_ptr->user_bins.filename_index(ixf_idx, bin + 1)) // end of split bin
             {
                 if (sum >= threshold)
-                    result_buffer.emplace_back(current_filename_index);
+                    result_buffer.emplace_back(std::make_pair(current_filename_index, sum));
                 sum = 0u;
             }
 
-            if (sum > max_sum)
-                max_sum = sum;
+            //if (sum > max_sum)
+            //    max_sum = sum;
         }
         
     }
@@ -351,7 +348,7 @@ public:
     //!\}
 
     //!\brief Stores the result of bulk_contains().
-    std::vector<int64_t> result_buffer;
+    std::vector<std::pair<int64_t, uint32_t>> result_buffer;
 
     /*!\name Lookup
      * \{
@@ -371,7 +368,7 @@ public:
      * hibf::hierarchical_interleaved_bloom_filter::membership_agent for each thread.
      */
     template <std::ranges::forward_range value_range_t>
-    [[nodiscard]] std::vector<int64_t> const & bulk_contains(value_range_t && values, size_t const threshold) & noexcept
+    [[nodiscard]] std::vector<std::pair<int64_t, uint32_t>> const & bulk_contains(value_range_t && values, size_t const threshold) & noexcept
     {
         assert(hixf_ptr != nullptr);
 
@@ -383,7 +380,7 @@ public:
 
         bulk_contains_impl(values, 0, threshold);
 
-        std::ranges::sort(result_buffer); // TODO: necessary?
+        //std::ranges::sort(result_buffer); // TODO: necessary?
 
         return result_buffer;
     }
@@ -391,7 +388,7 @@ public:
     // `bulk_contains` cannot be called on a temporary, since the object the returned reference points to
     // is immediately destroyed.
     template <std::ranges::range value_range_t>
-    [[nodiscard]] std::vector<int64_t> const & bulk_contains(value_range_t && values,
+    [[nodiscard]] std::vector<std::pair<int64_t, uint32_t>> const & bulk_contains(value_range_t && values,
                                                              size_t const threshold) && noexcept = delete;
     //!\}
 };

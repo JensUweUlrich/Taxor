@@ -41,14 +41,13 @@ public:
 
     size_t get(size_t minimiser_count, double scaling_factor) noexcept
     {
+        size_t fp_correction = minimiser_count * 0.0039;
         switch (threshold_kind)
         {
             case threshold_kinds::kmer_model:
             {
-                std::cout << "kmer_model" << std::endl;
                 hixf::threshold::TInterval ci = hixf::threshold::calculate_nmut_kmer_CI(error_rate, (size_t) kmer_size, minimiser_count, 0.95);
-                std::cout << ci.first << "\t" << ci.second << std::endl;
-                return minimiser_count - ci.second;
+                return minimiser_count - ci.second - fp_correction;
             }
             case threshold_kinds::fracminhash:
             {
@@ -57,9 +56,7 @@ public:
                                                                                                          minimiser_count, 
                                                                                                          scaling_factor, 
                                                                                                          0.95);
-                std::cout << "C_low  : " << cont_dist_ci.first << std::endl;
-                std::cout << "C_high : " << cont_dist_ci.second << std::endl;
-                return cont_dist_ci.first * minimiser_count;
+                return static_cast<size_t>(cont_dist_ci.first * minimiser_count) - fp_correction;
             }
             default:
             {
@@ -70,6 +67,9 @@ public:
 
 private:
     
+    // TODO: add specific syncmer model based on empirical data
+    //       minimum number of OCS found for each error rate and each kmer
+    //       0.90 <= r <=0.99 and 16 <= k <= 32
     enum class threshold_kinds
     {
         fracminhash,
