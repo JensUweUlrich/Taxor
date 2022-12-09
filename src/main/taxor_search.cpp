@@ -70,7 +70,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
     double index_io_time{0.0};
     double reads_io_time{0.0};
     double compute_time{0.0};
-    hixf::threshold thresholder;
+    hixf::threshold::threshold thresholder;
     // map hixf user bin to species list index position
     std::map<size_t, size_t> user_bin_index{};
     auto cereal_worker = [&]()
@@ -80,10 +80,11 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         arguments.shape = index.shape();
         arguments.shape_size = index.kmer_size();
         // TODO: thresholding should be set based on used pattern
-        if (arguments.compute_syncmer)
-            arguments.threshold = 0.2;
         hixf::threshold_parameters param = arguments.make_threshold_parameters();
-        thresholder = hixf::threshold{param};
+        if (arguments.compute_syncmer)
+            param.fracminhash = true;
+        param.seq_error_rate = 0.05;
+        thresholder = hixf::threshold::threshold{param};
         for (size_t i = 0; i < index.species().size(); ++i)
             user_bin_index.emplace(std::make_pair(index.species().at(i).user_bin, i));
     };
@@ -150,7 +151,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
                 hashes.assign(minimiser_view.begin(), minimiser_view.end());
             }
             size_t const hash_count{hashes.size()};
-            size_t threshold = thresholder.get(hash_count);
+            size_t threshold = thresholder.get(hash_count, (double)hash_count / ((double)seq.size() - (double)index.kmer_size() + 1.0));
             std::cout << "Threshold: " << threshold << std::endl;
             std::cout << "Minimizer count: " << hash_count << std::endl;
 

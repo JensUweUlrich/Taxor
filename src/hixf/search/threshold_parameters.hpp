@@ -23,6 +23,7 @@ struct threshold_parameters
     double fpr{};                                                // threshold_kinds::probabilistic
     double tau{};                                                // threshold_kinds::probabilistic
     double seq_error_rate{};                                     // threshold_kinds::confidence_interval
+    bool fracminhash{};
 
     // Cache results.
     bool cache_thresholds{};

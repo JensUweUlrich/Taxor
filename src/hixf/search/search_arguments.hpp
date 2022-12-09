@@ -63,6 +63,7 @@ struct search_arguments
                 fpr,
                 tau,
                 seq_error_rate,
+                false,
                 cache_thresholds,
                 index_file.parent_path()};
     }
