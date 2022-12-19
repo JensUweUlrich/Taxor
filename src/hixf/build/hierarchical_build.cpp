@@ -44,18 +44,6 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> &parent_hashes,
     for (size_t i = 0; i < current_node_data.remaining_records.size(); ++i)
     {
         auto const & record = current_node_data.remaining_records[i];
-        
-        
-        for (auto const & filename : record.filenames)
-        {
-            if (filename.compare("files.renamed/GCF_000839085.1_genomic.fna.gz") == 0)
-            {
-                //seqan3::debug_stream << "IXF vector index: " << ixf_pos << "\n";
-                investigate.emplace(ixf_pos);
-                compute_hashes(test_hashes, arguments, record);
-            }
-        }
-        
 
         if (is_root && record.number_of_bins.back() == 1) // no splitting needed
         {
@@ -85,6 +73,13 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> &parent_hashes,
     // only wite hashes to file if parent is root IXF
     if (is_root)
     {
+        for (auto & hashset : node_hashes)
+        {
+            //std::cout << hashset.size() << std::endl << std::flush;
+            if (hashset.size() > current_node_data.max_bin_hashes)
+                current_node_data.max_bin_hashes = hashset.size();
+        }
+        //std::cout << current_node_data.max_bin_hashes << std::endl << std::flush;
         auto && ixf = construct_ixf(data, current_node, ixf_positions, node_hashes, ixf_pos);
 
         // only for debugging

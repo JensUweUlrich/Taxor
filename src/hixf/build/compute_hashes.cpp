@@ -85,9 +85,10 @@ void compute_hashes(robin_hood::unordered_flat_set<size_t> & hashes,
             parse_ref_seqs(refs, filename);
             for (const auto & seq : refs)
 	    	{
-			    std::vector<uint64_t> strobe_hashes = hashing::seq_to_syncmers(arguments.kmer_size, seq, arguments.syncmer_size, arguments.t_syncmer);
-                hashes.insert(std::make_move_iterator(strobe_hashes.begin()), std::make_move_iterator(strobe_hashes.end()));
+			    hashes = hashing::seq_to_syncmers(arguments.kmer_size, seq, arguments.syncmer_size, arguments.t_syncmer);
+                
 		    }
+            
         }
     }
     else if (arguments.is_minimiser)

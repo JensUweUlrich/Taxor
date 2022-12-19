@@ -1,6 +1,7 @@
 #include <lemon/list_graph.h> /// Must be first include.
 
 #include <iostream>
+#include <filesystem>
 
 #include <chopper/count/read_data_file.hpp>
 #include <chopper/detail_apply_prefix.hpp>
@@ -18,6 +19,8 @@
 #include <build/strong_types.hpp>
 #include <build/build_arguments.hpp>
 #include <build/dna4_traits.hpp>
+
+#include <seqan3/alphabet/nucleotide/dna5.hpp>
 
 #include <syncmer.hpp>
 
@@ -61,11 +64,11 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::build::con
 
     parser.add_option(config.kmer_size, '\0', "kmer-size", "size of kmers used for index construction",
                       seqan3::option_spec::standard,
-                      seqan3::arithmetic_range_validator{static_cast<size_t>(1), static_cast<size_t>(32)});
+                      seqan3::arithmetic_range_validator{static_cast<size_t>(1), static_cast<size_t>(30)});
 
     parser.add_option(config.syncmer_size, '\0', "syncmer-size", "size of syncmer used for index construction",
                       seqan3::option_spec::standard,
-                      seqan3::arithmetic_range_validator{static_cast<size_t>(1), static_cast<size_t>(30)});
+                      seqan3::arithmetic_range_validator{static_cast<size_t>(1), static_cast<size_t>(26)});
 
     parser.add_option(config.threads,
                       '\0', "threads",
@@ -200,6 +203,10 @@ inline auto create_filename_clusters(taxor::build::configuration const taxor_con
     for (uint64_t org_index = 0; org_index < orgs.size(); ++org_index) //auto& species : orgs)
     {
         std::string filepath = taxor_config.input_sequence_folder + "/" + orgs[org_index].file_stem + "_genomic.fna.gz";
+        if (!std::filesystem::exists(std::filesystem::path{filepath}))
+            filepath = taxor_config.input_sequence_folder + "/" + orgs[org_index].file_stem + ".fna.gz";
+        if (!std::filesystem::exists(std::filesystem::path{filepath}))
+            filepath = taxor_config.input_sequence_folder + "/" + orgs[org_index].file_stem;
         filename_clusters[orgs.at(org_index).accession_id].push_back(filepath);
         user_bin_map.emplace(std::make_pair(filepath, org_index));
     }
@@ -214,7 +221,7 @@ inline void count_syncmers(robin_hood::unordered_map<std::string, std::vector<st
     using traits_type = seqan3::sequence_file_input_default_traits_dna;
     using sequence_file_t = seqan3::sequence_file_input<traits_type, seqan3::fields<seqan3::field::seq>>;
 
-    uint8_t t_syncmer = ceil((taxor_config.kmer_size - taxor_config.syncmer_size) / 2) + 1;
+    size_t t_syncmer = ceil((taxor_config.kmer_size - taxor_config.syncmer_size) / 2) + 1;
 
     std::ofstream fout{count_config.count_filename};
 
@@ -240,7 +247,7 @@ inline void count_syncmers(robin_hood::unordered_map<std::string, std::vector<st
         {
             for (auto && [seq] : sequence_file_t{filename})
             {
-			    std::vector<uint64_t> syncmer_hashes = hashing::seq_to_syncmers(taxor_config.kmer_size, seq, taxor_config.syncmer_size, t_syncmer);
+			    robin_hood::unordered_flat_set<size_t> syncmer_hashes = hashing::seq_to_syncmers(taxor_config.kmer_size, seq, taxor_config.syncmer_size, t_syncmer);   
                 for (auto &hash : syncmer_hashes)
                     sketch.add(hash);
             }
@@ -302,6 +309,7 @@ void create_layout(taxor::build::configuration const taxor_config,
     size_t max_hixf_id;
     max_hixf_id = determine_best_number_of_technical_bins(data, layout_config);
     
+    std::cout << "write Layout header" << std::endl;
 
     // brief Write the output to the layout file.
     std::ofstream fout{layout_config.output_filename};
@@ -372,10 +380,19 @@ int execute(seqan3::argument_parser & parser)
         return -1;
     }
 
+    /*std::cout << (int)config.kmer_size << std::endl << std::flush;
+    using namespace seqan3::literals;
+    seqan3::dna5_vector dna5_vec = "GAAATCATCCATCGACCTTACTAGTATGACCAAAAAGGTCAATTTTATTTTTGATGGGGCAGGTCGGCTTCAGTCAGACT"_dna5;
+    std::vector<uint64_t> syncmer_hashes = hashing::seq_to_syncmers(config.kmer_size, dna5_vec, 6, 14);
+
+    return 0;
+*/
     std::vector<taxonomy::Species> orgs = taxonomy::parse_refseq_taxonomy_file(config.input_file_name);
     // map filename to index of species in orgs vector 
     std::map<std::string, uint64_t> user_bin_map{};
     create_layout(config, orgs, user_bin_map);
+    //return 0;
+    std::cout << "layout created" << std::endl;
 
     build_hixf(config, orgs, user_bin_map);
 
