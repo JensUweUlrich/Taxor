@@ -85,7 +85,9 @@ void compute_hashes(robin_hood::unordered_flat_set<size_t> & hashes,
             parse_ref_seqs(refs, filename);
             for (const auto & seq : refs)
 	    	{
-			    hashes = hashing::seq_to_syncmers(arguments.kmer_size, seq, arguments.syncmer_size, arguments.t_syncmer);
+                robin_hood::unordered_flat_set<size_t> tmp = hashing::seq_to_syncmers(arguments.kmer_size, seq, arguments.syncmer_size, arguments.t_syncmer);
+			    hashes.insert(std::make_move_iterator(tmp.begin()), std::make_move_iterator(tmp.end()));
+                //hashes.insert(hashing::seq_to_syncmers(arguments.kmer_size, seq, arguments.syncmer_size, arguments.t_syncmer));
                 
 		    }
             

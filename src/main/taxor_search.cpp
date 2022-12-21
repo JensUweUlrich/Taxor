@@ -62,6 +62,13 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::search::co
                     seqan3::option_spec::hidden);
 }
 
+std::string format(float f, int digits) {
+    std::ostringstream ss;
+    ss.precision(digits);
+    ss << f;
+    return ss.str();
+}
+
 void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && index)
 {
     //constexpr bool is_ibf = std::same_as<index_t, raptor_index<index_structure::ibf>>
@@ -81,9 +88,10 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         arguments.shape_size = index.kmer_size();
         // TODO: thresholding should be set based on used pattern
         hixf::threshold_parameters param = arguments.make_threshold_parameters();
-        if (arguments.compute_syncmer)
-            param.fracminhash = true;
-        param.seq_error_rate = 0.05;
+        param.percentage = 0.05;
+        //if (arguments.compute_syncmer)
+            //param.fracminhash = true;
+        param.seq_error_rate = 0.11111;
         thresholder = hixf::threshold::threshold{param};
         for (size_t i = 0; i < index.species().size(); ++i)
             user_bin_index.emplace(std::make_pair(index.species().at(i).user_bin, i));
@@ -119,7 +127,9 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
     }
 
     
-
+    std::mutex count_mutex;
+    double mean_sum{0.0};
+    uint16_t reads{0};
     auto worker = [&](size_t const start, size_t const end)
     {
         auto counter = [&index]()
@@ -137,6 +147,8 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         for (auto && [id, seq] : records | seqan3::views::slice(start, end))
         {
             result_string.clear();
+            if (seq.size() < 500)
+                continue;
             //result_string += id;
             //result_string += '\t';
 
@@ -159,6 +171,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
 
             auto & result = counter.bulk_contains(hashes, threshold); // Results contains user bin IDs
             // write one line per reference match 
+            double max_ratio = 0.0;
             if (result.empty())
             {
                 result_string += id + '\t';
@@ -170,10 +183,17 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
                     result_string += id + '\t';
                     result_string += index.species().at(user_bin_index[count.first]).organism_name;
                     result_string += '\t';
-                    result_string += std::to_string(count.second-fp_correction);
+                    double rate = static_cast<double>(count.second-fp_correction) / static_cast<double>(hash_count);
+                    result_string += format(rate, 3);//std::to_string(count.second-fp_correction);
                     result_string += '\n';
+                    if (rate > max_ratio)
+                        max_ratio = rate;
                 }
             }
+            count_mutex.lock();
+            mean_sum += max_ratio;
+            reads++;
+            count_mutex.unlock();
             /*
             if (auto & last_char = result_string.back(); last_char == ',')
                 last_char = '\n';
@@ -181,7 +201,6 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
                 result_string += '\n';
             */
             synced_out.write(result_string);
-            break;
         }
     };
 
@@ -197,6 +216,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
 
         hixf::do_parallel(worker, records.size(), arguments.threads, compute_time);
     }
+    std::cout << "mean ratio : " << mean_sum / static_cast<double>(reads) << std::endl;
 
     // GCOVR_EXCL_START
     if (arguments.write_time)
