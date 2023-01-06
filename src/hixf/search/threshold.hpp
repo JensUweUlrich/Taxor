@@ -4,6 +4,7 @@
 #include "threshold_parameters.hpp"
 #include "kmer_model.hpp"
 #include "fracminhash_model.hpp"
+#include "syncmer_model.hpp"
 
 namespace hixf::threshold
 {
@@ -44,6 +45,11 @@ public:
         size_t fp_correction = minimiser_count * 0.0039;
         switch (threshold_kind)
         {
+            case threshold_kinds::syncmer_model:
+            {
+                double syncmer_match_ratio = hixf::threshold::get_min_syncmer_match_ratio(kmer_size, error_rate);
+                return static_cast<size_t>(minimiser_count * syncmer_match_ratio);
+            }
             case threshold_kinds::kmer_model:
             {
                 hixf::threshold::TInterval ci = hixf::threshold::calculate_nmut_kmer_CI(error_rate, (size_t) kmer_size, minimiser_count, 0.95);
@@ -75,6 +81,7 @@ private:
         fracminhash,
         percentage,
         kmer_model,
+        syncmer_model,
     };
 
     threshold_kinds threshold_kind{threshold_kinds::percentage};

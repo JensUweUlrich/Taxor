@@ -64,6 +64,7 @@ struct search_arguments
                 tau,
                 seq_error_rate,
                 false,
+                compute_syncmer,
                 cache_thresholds,
                 index_file.parent_path()};
     }
