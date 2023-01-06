@@ -7,8 +7,8 @@
 
 #pragma once
 
-#include "robin_hood.h"
-
+//#include "robin_hood.h"
+#include <ankerl/unordered_dense.h>
 #include "build_arguments.hpp"
 #include "build_data.hpp"
 
@@ -16,8 +16,8 @@ namespace hixf
 {
 
 //template <seqan3::data_layout data_layout_mode>
-seqan3::interleaved_xor_filter<> construct_ixf(robin_hood::unordered_flat_set<size_t> & parent_kmers,
-                                                 robin_hood::unordered_flat_set<size_t> & kmers,
+seqan3::interleaved_xor_filter<> construct_ixf(ankerl::unordered_dense::set<size_t> & parent_kmers,
+                                                 ankerl::unordered_dense::set<size_t> & kmers,
                                                  size_t const number_of_bins,
                                                  lemon::ListDigraph::Node const & node,
                                                  build_data & data,
@@ -27,10 +27,10 @@ seqan3::interleaved_xor_filter<> construct_ixf(robin_hood::unordered_flat_set<si
 seqan3::interleaved_xor_filter<> construct_ixf(build_data & data, 
                                                lemon::ListDigraph::Node const & current_node,
                                                std::vector<int64_t> & ixf_positions,
-                                               std::vector<robin_hood::unordered_flat_set<size_t>> &node_hashes,
+                                               std::vector<ankerl::unordered_dense::set<size_t>> &node_hashes,
                                                size_t const & current_node_ixf_position);
 
-seqan3::interleaved_xor_filter<> construct_ixf(std::vector<robin_hood::unordered_flat_set<size_t>> &node_hashes);
+seqan3::interleaved_xor_filter<> construct_ixf(std::vector<ankerl::unordered_dense::set<size_t>> &node_hashes);
 
 
 } // namespace raptor::hibf

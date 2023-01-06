@@ -73,7 +73,7 @@ using sequence_file_t = seqan3::sequence_file_input<dna4_traits, seqan3::fields<
 			 
  }
 
-void compute_hashes(robin_hood::unordered_flat_set<size_t> & hashes,
+void compute_hashes(ankerl::unordered_dense::set<size_t> & hashes,
                    build_arguments const & arguments,
                    chopper_pack_record const & record)
 {
@@ -85,8 +85,10 @@ void compute_hashes(robin_hood::unordered_flat_set<size_t> & hashes,
             parse_ref_seqs(refs, filename);
             for (const auto & seq : refs)
 	    	{
-                robin_hood::unordered_flat_set<size_t> tmp = hashing::seq_to_syncmers(arguments.kmer_size, seq, arguments.syncmer_size, arguments.t_syncmer);
+                //std::cout << "Before compute syncmers" << std::endl << std::flush;
+                ankerl::unordered_dense::set<size_t> tmp = hashing::seq_to_syncmers(arguments.kmer_size, seq, arguments.syncmer_size, arguments.t_syncmer);
 			    hashes.insert(std::make_move_iterator(tmp.begin()), std::make_move_iterator(tmp.end()));
+                //std::cout << "After compute syncmers" << std::endl << std::flush;
                 //hashes.insert(hashing::seq_to_syncmers(arguments.kmer_size, seq, arguments.syncmer_size, arguments.t_syncmer));
                 
 		    }

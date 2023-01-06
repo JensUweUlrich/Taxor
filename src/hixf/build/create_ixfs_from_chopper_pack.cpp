@@ -21,7 +21,7 @@ void create_ixfs_from_chopper_pack(build_data& data, build_arguments const & arg
     read_chopper_pack_file(data, arguments.bin_file);
 
     lemon::ListDigraph::Node root = data.ixf_graph.nodeFromId(0); // root node = high level IXF node
-    robin_hood::unordered_flat_set<size_t> root_hashes{};
+    ankerl::unordered_dense::set<size_t> root_hashes{};
 
     size_t const t_max{data.node_map[root].number_of_technical_bins};
 
@@ -30,7 +30,7 @@ void create_ixfs_from_chopper_pack(build_data& data, build_arguments const & arg
 
     typedef seqan3::interleaved_xor_filter<>::counting_agent_type< uint64_t > TIXFAgent;
     TIXFAgent ixf_count_agent = data.hixf.ixf_vector[0].counting_agent< uint64_t >();
-    robin_hood::unordered_flat_set<size_t> read_hashes{};
+    ankerl::unordered_dense::set<size_t> read_hashes{};
 
     using traits_type = seqan3::sequence_file_input_default_traits_dna;
     using sequence_file_t = seqan3::sequence_file_input<traits_type, seqan3::fields<seqan3::field::seq>>;
@@ -42,7 +42,7 @@ void create_ixfs_from_chopper_pack(build_data& data, build_arguments const & arg
                                                          seqan3::window_size{arguments.window_size},
                                                          seqan3::seed{hixf::adjust_seed(arguments.shape.count())}))*/
     {
-        robin_hood::unordered_flat_set<size_t> strobe_hashes = hashing::seq_to_syncmers(arguments.kmer_size, seq, arguments.syncmer_size, arguments.t_syncmer);
+        ankerl::unordered_dense::set<size_t> strobe_hashes = hashing::seq_to_syncmers(arguments.kmer_size, seq, arguments.syncmer_size, arguments.t_syncmer);
         for (auto &hash : strobe_hashes)
             read_hashes.insert(hash);
     }

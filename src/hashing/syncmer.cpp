@@ -50,13 +50,14 @@ static unsigned char seq_nt4_table[256] = {
 
 
 static inline uint64_t syncmer_kmer_hash(uint64_t packed) {
-    return robin_hood::hash_int(packed);
+    //return robin_hood::hash_int(packed);
+    return ankerl::unordered_dense::detail::wyhash::hash(packed);
     //return XXH64(&packed, sizeof(uint64_t), 0);
 }
 
 
 static inline void make_string_to_hashvalues_open_syncmers_canonical(const seqan3::dna5_vector &seq, 
-                                                                     robin_hood::unordered_flat_set<uint64_t> &string_hashes, 
+                                                                     ankerl::unordered_dense::set<size_t> &string_hashes, 
                                                                      const size_t k, 
                                                                      const size_t s, 
                                                                      const size_t t) {
@@ -132,10 +133,10 @@ static inline void make_string_to_hashvalues_open_syncmers_canonical(const seqan
     }
 }
 
-robin_hood::unordered_flat_set<uint64_t> seq_to_syncmers(int k, const seqan3::dna5_vector &seq, int s, int t)
+ankerl::unordered_dense::set<size_t> seq_to_syncmers(int k, const seqan3::dna5_vector &seq, int s, int t)
 {
     // make string of strobes into hashvalues all at once to avoid repetitive k-mer to hash value computations
-    robin_hood::unordered_flat_set<uint64_t> string_hashes{};
+    ankerl::unordered_dense::set<size_t> string_hashes{};
 
     make_string_to_hashvalues_open_syncmers_canonical(seq, string_hashes, k, s, t);
     return std::move(string_hashes);

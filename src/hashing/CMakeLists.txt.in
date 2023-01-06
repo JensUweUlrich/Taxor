@@ -1,0 +1,15 @@
+
+project(hashing-download NONE)
+include(ExternalProject)
+
+ExternalProject_Add(ankerl
+  PREFIX ankerl
+  GIT_REPOSITORY    https://github.com/martinus/unordered_dense.git
+  GIT_TAG           v3.0.1
+  SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/ankerl"
+  CMAKE_ARGS		    "-DCMAKE_PREFIX_PATH=<SOURCE_DIR>/lib/cmake/unordered_dense"
+  CMAKE_CACHE_ARGS
+        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/ankerl
+        -DCMAKE_PREFIX_PATH:PATH=${CMAKE_CURRENT_BINARY_DIR}/ankerl/lib/cmake/unordered_dense
+)
+

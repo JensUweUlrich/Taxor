@@ -10,6 +10,7 @@
                 "/home/jens/software/PoreClassify/build/seqan/lemon/include/**",
                 "/home/jens/software/PoreClassify/build/seqan/chopper/include/**",
                 "/home/jens/software/PoreClassify/build/seqan/chopper/lib/simde/simde/**",
+                "/home/jens/software/PoreClassify/build/hashing/ankerl/include/**",
                 "/home/jens/software/PoreClassify/src/hixf/**",
                 "/home/jens/software/PoreClassify/src/hashing/**",
                 "/home/jens/software/PoreClassify/src/taxonomy/**"
@@ -28,6 +29,7 @@
                     "/home/jens/software/PoreClassify/build/seqan/lemon/include",
                     "/home/jens/software/PoreClassify/build/seqan/chopper/include",
                     "/home/jens/software/PoreClassify/build/seqan/chopper/lib/simde/simde",
+                    "/home/jens/software/PoreClassify/build/hashing/ankerl/include",
                     "/home/jens/software/PoreClassify/src/hixf",
                     "/home/jens/software/PoreClassify/src/hashing",
                     "/home/jens/software/PoreClassify/src/taxonomy"

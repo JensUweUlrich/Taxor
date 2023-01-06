@@ -6,7 +6,7 @@
 namespace hixf
 {
 
-void create_temp_hash_file(size_t const ixf_pos, robin_hood::unordered_flat_set<size_t> &node_hashes)
+void create_temp_hash_file(size_t const ixf_pos, ankerl::unordered_dense::set<size_t> &node_hashes)
 {
     std::string ixf_tmp_name = "interleavedXOR_" + std::to_string(ixf_pos) + ".tmp";
     auto tmp_file = std::filesystem::temp_directory_path() / ixf_tmp_name;

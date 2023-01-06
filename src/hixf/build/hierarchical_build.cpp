@@ -4,7 +4,7 @@
 #include "compute_hashes.hpp"
 #include "construct_ixf.hpp"
 #include "hierarchical_build.hpp"
-#include "initialise_max_bin_hashes.hpp"
+//#include "initialise_max_bin_hashes.hpp"
 #include "insert_into_ixf.hpp"
 #include "insert_into_bins.hpp"
 #include "loop_over_children.hpp"
@@ -14,9 +14,10 @@
 namespace hixf
 {
 std::set<int64_t> investigate{};
-robin_hood::unordered_flat_set<size_t> test_hashes{};
+//robin_hood::unordered_flat_set<size_t> test_hashes{};
+ankerl::unordered_dense::set<size_t> test_hashes{};
 //template <seqan3::data_layout data_layout_mode>
-size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> &parent_hashes,
+size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
                           lemon::ListDigraph::Node & current_node,
                           build_data & data,
                           build_arguments const & arguments,
@@ -29,11 +30,11 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> &parent_hashes,
 
     std::vector<int64_t> ixf_positions(current_node_data.number_of_technical_bins, ixf_pos);
     std::vector<int64_t> filename_indices(current_node_data.number_of_technical_bins, -1);
-    std::vector<robin_hood::unordered_flat_set<size_t>> node_hashes{};
+    std::vector<ankerl::unordered_dense::set<size_t>> node_hashes{};
     // initialize hash sets of IXF bins
     for (int i = 0; i < current_node_data.number_of_technical_bins; ++i)
     {
-        robin_hood::unordered_flat_set<size_t> bin_data{};
+        ankerl::unordered_dense::set<size_t> bin_data{};
         node_hashes.emplace_back(bin_data);
     }
 
@@ -51,7 +52,7 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> &parent_hashes,
         }
         else
         {
-            robin_hood::unordered_flat_set<size_t> hashes{};
+            ankerl::unordered_dense::set<size_t> hashes{};
             compute_hashes(hashes, arguments, record);
             // only insert into hashes and parent_hashes and not into IXF directly
             insert_into_bins(hashes, node_hashes, record.number_of_bins.back(), record.bin_indices.back());
@@ -106,7 +107,7 @@ size_t hierarchical_build(robin_hood::unordered_flat_set<size_t> &parent_hashes,
         // reduces peak memory
         if (parent_is_root)
         {
-            robin_hood::unordered_flat_set<size_t> hashset{};
+            ankerl::unordered_dense::set<size_t> hashset{};
             for (auto hash_bin : node_hashes)
                 for (size_t hash : hash_bin)
                     hashset.insert(hash);

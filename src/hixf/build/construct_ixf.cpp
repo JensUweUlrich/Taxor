@@ -11,8 +11,8 @@ namespace hixf
 
 //template <seqan3::data_layout data_layout_mode>
 // @deprecated
-seqan3::interleaved_xor_filter<> construct_ixf(robin_hood::unordered_flat_set<size_t> & parent_hashes,
-                                                 robin_hood::unordered_flat_set<size_t> & hashes,
+seqan3::interleaved_xor_filter<> construct_ixf(ankerl::unordered_dense::set<size_t> & parent_hashes,
+                                                 ankerl::unordered_dense::set<size_t> & hashes,
                                                  size_t const number_of_bins,
                                                  lemon::ListDigraph::Node const & node,
                                                  build_data & data,
@@ -32,7 +32,7 @@ seqan3::interleaved_xor_filter<> construct_ixf(robin_hood::unordered_flat_set<si
     return ixf;
 }
 
-seqan3::interleaved_xor_filter<> construct_ixf(std::vector<robin_hood::unordered_flat_set<size_t>> &node_hashes)
+seqan3::interleaved_xor_filter<> construct_ixf(std::vector<ankerl::unordered_dense::set<size_t>> &node_hashes)
 {
     std::vector<std::vector<size_t>> tmp{};
     for (auto hash_bin : node_hashes)
@@ -50,7 +50,7 @@ seqan3::interleaved_xor_filter<> construct_ixf(std::vector<robin_hood::unordered
 seqan3::interleaved_xor_filter<> construct_ixf(build_data & data, 
                                                lemon::ListDigraph::Node const & current_node,
                                                std::vector<int64_t> & ixf_positions,
-                                               std::vector<robin_hood::unordered_flat_set<size_t>> &node_hashes,
+                                               std::vector<ankerl::unordered_dense::set<size_t>> &node_hashes,
                                                size_t const & current_node_ixf_pos)
 {
     auto &current_node_data = data.node_map[current_node];

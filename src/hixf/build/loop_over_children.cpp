@@ -11,7 +11,7 @@ namespace hixf
 {
 
 //template <seqan3::data_layout data_layout_mode>
-void loop_over_children(std::vector<robin_hood::unordered_flat_set<size_t>> & parent_hashes,
+void loop_over_children(std::vector<ankerl::unordered_dense::set<size_t>> & parent_hashes,
                         std::vector<int64_t> & ixf_positions,
                         lemon::ListDigraph::Node &current_node,
                         build_data & data,
@@ -36,7 +36,7 @@ void loop_over_children(std::vector<robin_hood::unordered_flat_set<size_t>> & pa
     auto worker = [&](auto && index, auto &&)
     {
         auto & child = children[index];
-        robin_hood::unordered_flat_set<size_t> hashes{};
+        ankerl::unordered_dense::set<size_t> hashes{};
         size_t const ixf_pos = hierarchical_build(hashes, child, data, arguments, false, parent_is_root); // gets back 793 for low level IXF
         auto parent_bin_index = data.node_map[child].parent_bin_index;
         {

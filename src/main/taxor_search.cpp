@@ -155,7 +155,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
             if (arguments.compute_syncmer)
             {
                 seqan3::dna5_vector dna5_vector{seq.begin(), seq.end()};
-                robin_hood::unordered_flat_set<size_t> strobe_hashes = hashing::seq_to_syncmers(index.kmer_size(),dna5_vector, index.syncmer_size(), index.t_syncmer());
+                ankerl::unordered_dense::set<size_t> strobe_hashes = hashing::seq_to_syncmers(index.kmer_size(),dna5_vector, index.syncmer_size(), index.t_syncmer());
                 hashes.assign(std::make_move_iterator(strobe_hashes.begin()), std::make_move_iterator(strobe_hashes.end()));
             }
             else

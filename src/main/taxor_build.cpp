@@ -247,7 +247,7 @@ inline void count_syncmers(robin_hood::unordered_map<std::string, std::vector<st
         {
             for (auto && [seq] : sequence_file_t{filename})
             {
-			    robin_hood::unordered_flat_set<size_t> syncmer_hashes = hashing::seq_to_syncmers(taxor_config.kmer_size, seq, taxor_config.syncmer_size, t_syncmer);   
+			    ankerl::unordered_dense::set<size_t> syncmer_hashes = hashing::seq_to_syncmers(taxor_config.kmer_size, seq, taxor_config.syncmer_size, t_syncmer);   
                 for (auto &hash : syncmer_hashes)
                     sketch.add(hash);
             }
