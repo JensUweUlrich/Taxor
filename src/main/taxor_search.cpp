@@ -88,10 +88,10 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         arguments.shape_size = index.kmer_size();
         // TODO: thresholding should be set based on used pattern
         hixf::threshold_parameters param = arguments.make_threshold_parameters();
-        param.percentage = 0.05;
+        //param.percentage = 0.05;
         //if (arguments.compute_syncmer)
             //param.fracminhash = true;
-        param.seq_error_rate = 0.11111;
+        //param.seq_error_rate = 0.11111;
         thresholder = hixf::threshold::threshold{param};
         for (size_t i = 0; i < index.species().size(); ++i)
             user_bin_index.emplace(std::make_pair(index.species().at(i).user_bin, i));

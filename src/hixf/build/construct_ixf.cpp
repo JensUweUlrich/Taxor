@@ -78,7 +78,7 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
             // read in hashes of child IXF and add all hashes to corresponding bin of current node IXF
             read_from_temp_hash_file((*it).second, hashes);
             //if ( hashes.size() > current_node_data.max_bin_hashes)
-            std::cerr << (*it).first << "\t" << (*it).second <<"\t" << hashes.size() << "\t" << current_node_data.max_bin_hashes << std::endl;
+            std::cerr << (*it).first << "\t" << (*it).second <<"\t" << hashes.size() << "\t" << current_node_data.max_bin_hashes << std::endl << std::flush;
             success = ixf.add_bin_elements((*it).first, hashes);
             if(!success)
                 break;
@@ -89,12 +89,13 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
         {   
             ixf.clear();
             ixf.set_seed();
+            std::cerr << "set new seed" << std::endl << std::flush;
             continue;
         }
 
         // iterate over new hashes
         // add hashes of bins for newly computed hashes on that level
-        /*
+        
         uint16_t bin_idx{0};
         for (auto hash_bin : node_hashes)
         {
@@ -113,7 +114,7 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
 
             bin_idx++;
         }
-        */
+        
         // reset seed if adding bin to IXF was not successful
         if (!success)
         {   

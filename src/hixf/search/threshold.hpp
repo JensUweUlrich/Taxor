@@ -28,6 +28,11 @@ public:
             threshold_kind = threshold_kinds::percentage;
             threshold_percentage = arguments.percentage;
         }
+        else if (arguments.use_syncmer)
+        {
+            threshold_kind = threshold_kinds::syncmer_model;
+            error_rate = arguments.seq_error_rate;
+        }
         else if (kmers_per_window == 1 && !arguments.fracminhash)
         {
             error_rate = arguments.seq_error_rate;

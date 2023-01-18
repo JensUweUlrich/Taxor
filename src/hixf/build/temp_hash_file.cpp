@@ -27,7 +27,7 @@ void read_from_temp_hash_file(int64_t & ixf_position,
     auto tmp_file = std::filesystem::temp_directory_path() / ixf_tmp_name;
     if (!std::filesystem::exists(tmp_file))
     {
-        //std::cerr << ixf_tmp_name << "does not exist!" << std::endl;
+        std::cerr << ixf_tmp_name << "does not exist!" << std::endl << std::flush;
         return;
     }
     std::ifstream tmp_stream(tmp_file, std::ios::in | std::ios::binary);
