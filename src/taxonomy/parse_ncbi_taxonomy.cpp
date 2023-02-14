@@ -15,10 +15,11 @@ namespace taxor::taxonomy
 		{
 			Species sp{};
 			sp.accession_id = line[0];
-			sp.organism_name = line[2];
+			sp.taxid = line[1];
+			sp.organism_name = line[3];
 			
 			std::string tmp;
-			std::stringstream taxonomy(line[3]);
+			std::stringstream taxonomy(line[4]);
 			while (getline(taxonomy, tmp, '\t'))
 			{
 				if (tmp.substr(0, 1).compare("s") == 0)
@@ -36,12 +37,13 @@ namespace taxor::taxonomy
 				else if(tmp.substr(0, 1).compare("k") == 0)
 					sp.kingdom = tmp.substr(3);
 			}
-			std::size_t found = line[1].find_last_of("/\\");
+			std::size_t found = line[2].find_last_of("/\\");
 			if (found != std::string::npos)
-				sp.file_stem = line[1].substr(found+1);
+				sp.file_stem = line[2].substr(found+1);
 			
 			org_list.emplace_back(std::move(sp));
 	 	}
+		
 		return std::move(org_list);
     }
     

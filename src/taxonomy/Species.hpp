@@ -13,6 +13,7 @@ class Species
 public:
 	std::string organism_name;
 	std::string accession_id; // ncbi accession
+    std::string taxid;
     std::string file_stem;
     std::string species;
     std::string genus;
@@ -22,6 +23,7 @@ public:
     std::string phylum;
     std::string kingdom;
     uint16_t user_bin;
+    uint64_t seq_len;
 
 
     /*!\name Constructors, destructor and assignment
@@ -45,6 +47,7 @@ public:
     {
         archive(organism_name);
         archive(accession_id);
+        archive(taxid);
         archive(species);
         archive(genus);
         archive(family);
@@ -53,6 +56,7 @@ public:
         archive(phylum);
         archive(kingdom);
         archive(user_bin);
+        archive(seq_len);
     }
 
 };

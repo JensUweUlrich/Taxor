@@ -34,6 +34,8 @@
 namespace taxor::build
 {
 
+using sequence_file_t = seqan3::sequence_file_input<hixf::dna4_traits, seqan3::fields<seqan3::field::seq>>;
+
 void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::build::configuration & config)
 {
     parser.info.version = "0.1.0";
@@ -335,16 +337,23 @@ void build_hixf(taxor::build::configuration const config,
 	
     hixf::build_data data{};
    
+   
     hixf::create_ixfs_from_chopper_pack(data, args);
     
     std::vector<std::vector<std::string>> bin_path{};
     for (size_t i{0}; i < data.hixf.user_bins.num_user_bins(); ++i)
     {
         bin_path.push_back(std::vector<std::string>{data.hixf.user_bins.filename_of_user_bin(i)});
-        orgs.at(user_bin_map[data.hixf.user_bins.filename_of_user_bin(i)]).user_bin = i;
+        uint64_t org_index = user_bin_map[data.hixf.user_bins.filename_of_user_bin(i)];
+        orgs.at(org_index).user_bin = i;
+        orgs.at(org_index).seq_len = 0;
+        for (auto && [seq] : sequence_file_t{data.hixf.user_bins.filename_of_user_bin(i)})
+	    {
+            orgs.at(org_index).seq_len += seq.size();
+        }
     }
-
-   taxor_index<hixf::hierarchical_interleaved_xor_filter<uint8_t>> index{hixf::window{args.window_size},
+    
+    taxor_index<hixf::hierarchical_interleaved_xor_filter<uint8_t>> index{hixf::window{args.window_size},
                                                                                 args.shape,
                                                                                 args.kmer_size,
                                                                                 args.syncmer_size,

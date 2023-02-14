@@ -17,7 +17,7 @@ namespace hixf::threshold
                         + (double)kmer_size * ((double)kmer_size - 1.0) * pow((1.0 - q), 2.0)
                         + (2.0 * (1.0 - q) / (pow(r, 2.0))) * ((1.0 + ((double)kmer_size - 1.0) * (1.0 - q)) * r - q);
         double alpha = 1 - confidence;
-        std::cout << varN << "\t" << q << std::endl;
+        //std::cout << varN << "\t" << q << std::endl;
         double z = NormalCDFInverse(1.0 - alpha / 2.0);
         size_t low = static_cast<size_t>(floor(kmer_count * q - z * sqrt(varN)));
         size_t high = static_cast<size_t>(ceil(kmer_count * q + z * sqrt(varN)));

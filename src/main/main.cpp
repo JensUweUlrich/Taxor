@@ -29,6 +29,7 @@
 
 #include "taxor_build.hpp"
 #include "taxor_search.hpp"
+#include "taxor_profile.hpp"
 
 
 using namespace seqan3::literals;
@@ -53,7 +54,7 @@ int main(int argc, char const **argv)
 {
 
 	seqan3::argument_parser top_level_parser{"taxor", argc, argv, seqan3::update_notifications::off,
-                                             {"build", "search"}};
+                                             {"build", "search", "profile"}};
     top_level_parser.info.version = "1.0.0";
 
     try
@@ -74,6 +75,8 @@ int main(int argc, char const **argv)
         error_code = taxor::build::execute(sub_parser);
     else if (sub_parser.info.app_name == std::string_view{"taxor-search"})
         error_code = taxor::search::execute(sub_parser);
+	else if (sub_parser.info.app_name == std::string_view{"taxor-profile"})
+        error_code = taxor::profile::execute(sub_parser);
 
 	size_t peakSize = getPeakRSS();
 	int peakSizeMByte = (int)(peakSize / (1024 * 1024));

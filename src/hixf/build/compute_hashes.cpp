@@ -51,7 +51,7 @@ using sequence_file_t = seqan3::sequence_file_input<dna4_traits, seqan3::fields<
  {
 
 	for (auto && [seq] : sequence_file_t{reference_file})
-	 {
+	{
 
 		 int counter = 1;
 		 auto charstring = seq | seqan3::views::to_char;
@@ -69,7 +69,7 @@ using sequence_file_t = seqan3::sequence_file_input<dna4_traits, seqan3::fields<
 
 		 refs.emplace_back(newseq);
 					
-	 }
+	}
 			 
  }
 

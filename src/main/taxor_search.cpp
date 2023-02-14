@@ -49,6 +49,18 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::search::co
                       seqan3::option_spec::standard,
                       seqan3::arithmetic_range_validator{static_cast<size_t>(1), static_cast<size_t>(32)});
 
+    parser.add_option(config.threshold,
+                    '\0', "percentage",
+                    "If set, this threshold is used instead of the k-mer/syncmer models.",
+                    seqan3::option_spec::standard,
+                    seqan3::arithmetic_range_validator{static_cast<double>(0.0), static_cast<double>(1.0)});
+
+    parser.add_option(config.error_rate,
+                    '\0', "error-rate",
+                    "Expected error rate of reads that will be queried",
+                    seqan3::option_spec::standard,
+                    seqan3::arithmetic_range_validator{static_cast<double>(0.0), static_cast<double>(1.0)});
+
     parser.add_flag(config.output_verbose_statistics,
                     '\0', "output-verbose-statistics",
                     "Enable verbose statistics to be "
@@ -87,6 +99,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         arguments.shape = index.shape();
         arguments.shape_size = index.kmer_size();
         // TODO: thresholding should be set based on used pattern
+        //std::cout << arguments.threshold << std::endl << std::flush;
         hixf::threshold_parameters param = arguments.make_threshold_parameters();
         //param.percentage = 0.05;
         //if (arguments.compute_syncmer)
@@ -123,7 +136,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
             synced_out << line;
             ++position;
         }*/
-        synced_out << "#QUERY_NAME\tREFERENCE_NAME\n";
+        synced_out << "#QUERY_NAME\tACCESSION\tREFERENCE_NAME\tTAXID\tREF_LEN\tQUERY_LEN\tQHASH_COUNT\tQHASH_MATCH\tQUERY_COV\n";
     }
 
     
@@ -170,6 +183,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
             //std::cout << "Minimizer count: " << hash_count << std::endl;
 
             auto & result = counter.bulk_contains(hashes, threshold); // Results contains user bin IDs
+            hashes.clear();
             // write one line per reference match 
             double max_ratio = 0.0;
             if (result.empty())
@@ -178,10 +192,32 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
                 result_string += "-\n";
             }
             else{
+                uint64_t max_count = 0;
                 for (auto && count : result)
                 {
+                    if (count.second > max_count)
+                        max_count = count.second;
+                }
+
+                for (auto && count : result)
+                {
+                    // filter out counts that have less than max_count*0.8 matching hashes
+                    if (static_cast<double>(count.second) < static_cast<double>(max_count) * 0.8)
+                        continue;
                     result_string += id + '\t';
+                    result_string += index.species().at(user_bin_index[count.first]).accession_id;
+                    result_string += '\t';
                     result_string += index.species().at(user_bin_index[count.first]).organism_name;
+                    result_string += '\t';
+                    result_string += index.species().at(user_bin_index[count.first]).taxid;
+                    result_string += '\t';
+                    result_string += std::to_string(index.species().at(user_bin_index[count.first]).seq_len);
+                    result_string += '\t';
+                    result_string += std::to_string(seq.size());
+                    result_string += '\t';
+                    result_string += std::to_string(hash_count);
+                    result_string += '\t';
+                    result_string += std::to_string(count.second);
                     result_string += '\t';
                     double rate = static_cast<double>(count.second-fp_correction) / static_cast<double>(hash_count);
                     result_string += format(rate, 3);//std::to_string(count.second-fp_correction);
@@ -204,7 +240,8 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         }
     };
 
-    for (auto && chunked_records : fin | seqan3::views::chunk((1ULL << 20) * 10))
+    //std::cout << (1ULL << 20) << std::endl << std::flush;
+    for (auto && chunked_records : fin | seqan3::views::chunk(1024))
     {
         records.clear();
         auto start = std::chrono::high_resolution_clock::now();
@@ -216,7 +253,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
 
         hixf::do_parallel(worker, records.size(), arguments.threads, compute_time);
     }
-    std::cout << "mean ratio : " << mean_sum / static_cast<double>(reads) << std::endl;
+    //std::cout << "mean ratio : " << mean_sum / static_cast<double>(reads) << std::endl;
 
     // GCOVR_EXCL_START
     if (arguments.write_time)
@@ -237,7 +274,9 @@ void search_hixf(taxor::search::configuration const config)
 	search_args.index_file = config.index_file; //std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/raptor_kmer.hixf"};
 	search_args.query_file = config.query_file;//std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/files.renamed/GCF_000839085.1_genomic.fna.gz"};
 	search_args.out_file = config.report_file;//std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/raptor.hixf_search.out"};
+    search_args.threshold = config.threshold;
     search_args.threads = config.threads;
+    search_args.seq_error_rate = config.error_rate;
     // TODO: should be set after loading the index
 	//search_args.compute_syncmer = false;
 	//search_args.threshold = 0.2;
@@ -245,6 +284,7 @@ void search_hixf(taxor::search::configuration const config)
 	auto index = taxor_index<hixf_t>{};
     search_single(search_args, std::move(index));
 }
+
 
 
 int execute(seqan3::argument_parser & parser)

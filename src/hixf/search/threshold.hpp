@@ -22,32 +22,36 @@ public:
     threshold(threshold_parameters & arguments)
     {
         kmer_size = arguments.kmer_size;
+        error_rate = arguments.seq_error_rate;
         size_t kmers_per_window = arguments.window_size - kmer_size + 1;
+        //std::cout << arguments.percentage << std::endl << std::flush;
         if (arguments.percentage > 0.0 && arguments.percentage <= 1.0)
         {
             threshold_kind = threshold_kinds::percentage;
             threshold_percentage = arguments.percentage;
+            std::cout << "use percentage-model\t" << arguments.percentage << std::endl << std::flush;
         }
         else if (arguments.use_syncmer)
         {
             threshold_kind = threshold_kinds::syncmer_model;
-            error_rate = arguments.seq_error_rate;
+            std::cout << "use syncmer-model" << std::endl << std::flush;
         }
         else if (kmers_per_window == 1 && !arguments.fracminhash)
         {
-            error_rate = arguments.seq_error_rate;
+            std::cout << "use kmer-model" << std::endl << std::flush;
             threshold_kind = threshold_kinds::kmer_model;
         }
         else
         {
             threshold_kind = threshold_kinds::fracminhash;
-            error_rate = arguments.seq_error_rate;
+            std::cout << "use frac minhash" << std::endl << std::flush;
         }
     }
 
     size_t get(size_t minimiser_count, double scaling_factor) noexcept
     {
         size_t fp_correction = minimiser_count * 0.0039;
+        //std::cout << error_rate << std::endl << std::flush;
         switch (threshold_kind)
         {
             case threshold_kinds::syncmer_model:
