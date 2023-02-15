@@ -72,6 +72,8 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
 
     // store hashes in parent_hash_set 
     // only wite hashes to file if parent is root IXF
+    bool low_mem = true;
+
     if (is_root)
     {
         for (auto & hashset : node_hashes)
@@ -84,7 +86,7 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
         auto && ixf = construct_ixf(data, current_node, ixf_positions, node_hashes, ixf_pos);
 
         // only for debugging
-        std::vector<size_t> c{};
+       /* std::vector<size_t> c{};
         std::ranges::copy(test_hashes, std::back_inserter(c));
         typedef seqan3::interleaved_xor_filter<>::counting_agent_type< uint64_t > TIXFAgent;  
         for (uint64_t p : investigate)
@@ -95,7 +97,7 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
 		    auto result = ixf_count_agent.bulk_count(c);
             seqan3::debug_stream << "Index " << p << ": " << result << "\n";
         }
-
+        */
         data.hixf.ixf_vector[ixf_pos] = std::move(ixf);
         data.hixf.next_ixf_id[ixf_pos] = std::move(ixf_positions);
         data.hixf.user_bins.bin_indices_of_ixf(ixf_pos) = std::move(filename_indices);
@@ -105,7 +107,7 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
     {
         // for level below root, we store hashes of the IXF in a temp file
         // reduces peak memory
-        if (parent_is_root)
+        if (parent_is_root || low_mem)
         {
             ankerl::unordered_dense::set<size_t> hashset{};
             for (auto hash_bin : node_hashes)
@@ -123,11 +125,30 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
                     parent_hashes.insert(hash);
             }
         }
-        // insert all hashes of all technical bins into newly created IXF
-        auto && ixf = construct_ixf(node_hashes);
-        data.hixf.ixf_vector[ixf_pos] = std::move(ixf);
-        data.hixf.next_ixf_id[ixf_pos] = std::move(ixf_positions);
-        data.hixf.user_bins.bin_indices_of_ixf(ixf_pos) = std::move(filename_indices);
+
+        if (low_mem)
+        {
+            for (auto & hashset : node_hashes)
+            {
+            //std::cout << hashset.size() << std::endl << std::flush;
+                if (hashset.size() > current_node_data.max_bin_hashes)
+                    current_node_data.max_bin_hashes = hashset.size();
+            }
+            //std::cout << current_node_data.max_bin_hashes << std::endl << std::flush;
+            auto && ixf = construct_ixf(data, current_node, ixf_positions, node_hashes, ixf_pos);
+            data.hixf.ixf_vector[ixf_pos] = std::move(ixf);
+            data.hixf.next_ixf_id[ixf_pos] = std::move(ixf_positions);
+            data.hixf.user_bins.bin_indices_of_ixf(ixf_pos) = std::move(filename_indices);
+        }
+        else
+        {
+
+            // insert all hashes of all technical bins into newly created IXF
+            auto && ixf = construct_ixf(node_hashes);
+            data.hixf.ixf_vector[ixf_pos] = std::move(ixf);
+            data.hixf.next_ixf_id[ixf_pos] = std::move(ixf_positions);
+            data.hixf.user_bins.bin_indices_of_ixf(ixf_pos) = std::move(filename_indices);
+        }
     }
 
     node_hashes.clear();
