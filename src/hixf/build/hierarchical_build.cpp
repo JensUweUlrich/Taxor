@@ -72,7 +72,7 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
 
     // store hashes in parent_hash_set 
     // only wite hashes to file if parent is root IXF
-    bool low_mem = true;
+    bool low_mem = false;
 
     if (is_root)
     {
