@@ -19,7 +19,7 @@ tar -zxvf taxdump.tar.gz -C taxdump
 
 cut -f 1,6,20 ../assembly_summary.txt \
 | taxonkit lineage -i 2 -r -n -L --data-dir taxdump \
-| taxonkit reformat -I 2 -P --data-dir taxdump \
-| cut -f 1,2,3,4,6 > refseq_accessions_taxonomy.csv
+| taxonkit reformat -I 2 -P -t --data-dir taxdump \
+| cut -f 1,2,3,4,6,7 > refseq_accessions_taxonomy.csv
 
 ```
