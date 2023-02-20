@@ -1,6 +1,6 @@
 
 
-
+#include <math.h> 
 
 #include "taxor_profile_configuration.hpp"
 #include "taxor_profile.hpp"
@@ -54,7 +54,8 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::profile::c
 }
 
 
-std::map<std::string, std::vector<taxonomy::Search_Result>> parse_search_results(std::string const filepath)
+std::map<std::string, std::vector<taxonomy::Search_Result>> parse_search_results(std::string const filepath,
+                                                                    std::map<std::string, std::pair<std::string, std::string>> &taxpath)
 {
     std::vector<std::vector<std::string> > tax_file_lines{};
     taxonomy::read_tsv(filepath, tax_file_lines);
@@ -83,6 +84,12 @@ std::map<std::string, std::vector<taxonomy::Search_Result>> parse_search_results
             res.query_len = std::stoull(line[5]);
             res.query_hash_count = std::stoull(line[6]);
             res.query_hash_match = std::stoull(line[7]);
+
+            if (!taxpath.contains(res.taxid))
+            {
+                std::pair<std::string, std::string> taxpair = std::make_pair(line[9], line[8]);
+                taxpath.insert(std::move(std::make_pair(res.taxid, std::move(taxpair))));
+            }
         }
 
 		if (!results.contains(read_id))
@@ -279,35 +286,191 @@ std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std:
         it++;
     }
     
-    return taxa_lengths;
+    return std::move(taxa_lengths);
 }
 
-std::map<std::string, double> initialize_prior_probabilities(std::map<std::string, size_t>& taxa)
+std::map<std::string, double> initialize_prior_log_probabilities(std::map<std::string, size_t>& taxa)
 {
     std::map<std::string, double> priors {};
     for (auto & taxon : taxa)
     {
-        priors.insert(std::move(std::make_pair(taxon.first, 1.0 / static_cast<double>(taxa.size()))));
-        std::cout << priors.at(taxon.first) << "\t" << taxa.size() << std::endl;
+        priors.insert(std::move(std::make_pair(taxon.first, log(1.0 / static_cast<double>(taxa.size())))));
     }
     return std::move(priors);
 }
 
-void expectation_maximization(size_t iterations, std::map<std::string, size_t> & taxa)
+std::map<std::string, std::map<std::string, double>> calculate_log_likelihoods(std::map<std::string, std::vector<taxonomy::Search_Result>> &search_results)
 {
-    std::map<std::string, double> priors = initialize_prior_probabilities(taxa);
+    std::map<std::string, std::map<std::string, double>> likelihoods{};
+    for (auto & pair : search_results)
+    {
+        std::map<std::string, double> read_ref_liklihoods{};
+        if (pair.second.size() == 0) continue;
+        if (pair.second.size() > 1)
+        {
+            // calculate sum of matchcount ratios
+            double sum_ratio{0.0};
+            for (auto & res : pair.second)
+            {
+                sum_ratio += static_cast<double>(res.query_hash_match) / static_cast<double>(res.query_hash_count);
+            }
+
+            // calculate log likelihoods of the single matches
+            for (auto & res : pair.second)
+            {
+                double likeL = (log(static_cast<double>(res.query_hash_match)) - log(static_cast<double>(res.query_hash_count))) - log(sum_ratio);
+                read_ref_liklihoods.insert(std::move(std::make_pair(res.taxid, likeL)));
+            }
+        }
+        else
+        {
+            // if there is one unique mapping between this read and a reference
+            if (pair.second.at(0).taxid.compare("-") != 0)
+            {
+                read_ref_liklihoods.insert(std::move(std::make_pair(pair.second.at(0).taxid, 0.0)));
+            }
+        }
+
+        likelihoods.insert(std::move(std::make_pair(pair.first, read_ref_liklihoods)));
+    }
+
+    return std::move(likelihoods);
+}
+
+void update_log_prior_probabilities(std::map<std::string, double> &log_priors,
+                                    std::map<std::string, size_t> & taxa,
+                                    std::map<std::string, std::vector<taxonomy::Search_Result>> &profile_results)
+{
+    std::map<std::string, uint64_t> ref_nts{};
+    for (auto & t : taxa)
+        ref_nts.insert(std::move(std::make_pair(t.first, 0)));
+
+    // for each taxon sum all lengths of matching reads
+    for (auto &read : profile_results)
+    {
+        if (read.second.at(0).taxid.compare("-") == 0)
+            continue;
+        for (auto &ref : read.second)
+        {
+            ref_nts.at(ref.taxid) += ref.query_len;
+        }
+    }
+    // calculate average depth of coverage for each taxon
+    // sum of all matched read lengths divided by length of taxon reference sequence
+    double sum_avg_cov{0.0};
+    for (auto & t : ref_nts)
+    {
+        log_priors.at(t.first) = static_cast<double>(t.second) / static_cast<double>(taxa.at(t.first));
+        sum_avg_cov += log_priors.at(t.first);
+    }
+
+    // calculate relative genomic abundance for each taxon
+    // divide average coverage of each taxon by the sum of average coverage of all taxa
+    for (auto &t : log_priors)
+    {
+        log_priors.at(t.first) = log(t.second + 0.000000000001) - log(sum_avg_cov);
+    }
+
+}
+
+void calculate_higher_rank_abundances(std::map<std::string, size_t> & taxa,
+                                      std::map<std::string, std::vector<taxonomy::Search_Result>> &profile_results,
+                                      std::map<std::string, std::pair<std::string, std::string>> &taxpath)
+{
+    
+}
+
+std::map<std::string, double> expectation_maximization(size_t iterations, 
+                              std::map<std::string, size_t> & taxa,
+                              std::map<std::string, std::vector<taxonomy::Search_Result>> &search_results,
+                              std::map<std::string, std::vector<taxonomy::Search_Result>> &profile_results)
+{
+    std::map<std::string, double> log_priors = initialize_prior_log_probabilities(taxa);
+    std::map<std::string, std::map<std::string, double>> log_likelihoods = calculate_log_likelihoods(search_results);
+    double cond_log_likelihood = -__DBL_MAX__;
+    size_t iter_step = 0;
+    while(iter_step < iterations)
+    {
+        double new_cond_log_likelihood = 0;
+        profile_results.clear();
+        for (auto & read : search_results)
+        {
+            double max_post = -__DBL_MAX__;
+            std::vector<taxonomy::Search_Result> best_match{};
+            for (auto &res : read.second)
+            {   
+
+                if (read.second.at(0).taxid.compare("-") == 0)
+                {
+                    best_match.emplace_back(res);
+                    break;
+                }
+               
+                double post = log_likelihoods.at(read.first).at(res.taxid) + log_priors.at(res.taxid);
+
+                new_cond_log_likelihood += post;
+                if (post >= max_post)
+                {
+                    if (post > max_post)
+                    {
+                        max_post = post;
+                        best_match.clear();
+                    }
+                    best_match.emplace_back(res);
+                }
+
+            }
+            profile_results.insert(std::move(std::make_pair(read.first, std::move(best_match))));
+        }
+        
+        // update referencs abundances (priors)
+        update_log_prior_probabilities(log_priors, taxa, profile_results);
+        double diff = new_cond_log_likelihood - cond_log_likelihood;
+        if (diff < abs(log(0.0001)))
+            break;
+
+        cond_log_likelihood = new_cond_log_likelihood;
+        iter_step++;
+    }
+    std::cout << "Number of EM steps needed: " << iter_step << std::endl;
+
+    for (auto & t : log_priors)
+    {
+        log_priors.at(t.first) = exp(t.second);
+    }
+
+    return std::move(log_priors);
 }
 
 void tax_profile(taxor::profile::configuration& config)
 {
-    
-    std::map<std::string, std::vector<taxonomy::Search_Result>> search_results = parse_search_results(config.search_file);
+    // <taxid, <taxid_string, taxname_string>>
+    std::map<std::string, std::pair<std::string, std::string>> taxpath{};
+    std::map<std::string, std::vector<taxonomy::Search_Result>> search_results = parse_search_results(config.search_file, taxpath);
     ankerl::unordered_dense::set<std::string> ref_unique_mappings = get_refs_with_uniquely_mapping_reads(search_results);
 
-    std::cout << ref_unique_mappings.size() << std::endl;
+    //std::cout << ref_unique_mappings.size() << std::endl;
     //remove_matches_to_nonunique_refs(search_results, ref_unique_mappings);
     std::map<std::string, size_t> found_taxa = filter_ref_associations(search_results);
-    expectation_maximization(1000, found_taxa);
+    std::map<std::string, std::vector<taxonomy::Search_Result>> profile_results{};
+    std::map<std::string, double> tax_abundances = expectation_maximization(1000, found_taxa, search_results, profile_results);
+    
+    for (auto & t: tax_abundances)
+    {
+        if (t.second >= 0.000001)
+        std::cout << t.first << "\t" << t.second << std::endl;
+    }
+
+    size_t unclassified = 0;
+    for (auto & read : profile_results)
+    {
+        if (read.second.at(0).taxid.compare("-") == 0)
+        {
+            unclassified++;
+            std::cout << read.second.at(0).query_len << std::endl;
+        }
+    }
+    std::cout << "Unclassified : " << unclassified << " / " << profile_results.size() << std::endl;
 }
 
 int execute(seqan3::argument_parser & parser)

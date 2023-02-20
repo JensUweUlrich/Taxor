@@ -15,13 +15,8 @@ public:
 	std::string accession_id; // ncbi accession
     std::string taxid;
     std::string file_stem;
-    std::string species;
-    std::string genus;
-    std::string family;
-    std::string order;
-    std::string class_tax;
-    std::string phylum;
-    std::string kingdom;
+    std::string taxnames_string;
+    std::string taxid_string;
     uint16_t user_bin;
     uint64_t seq_len;
 
@@ -48,13 +43,8 @@ public:
         archive(organism_name);
         archive(accession_id);
         archive(taxid);
-        archive(species);
-        archive(genus);
-        archive(family);
-        archive(order);
-        archive(class_tax);
-        archive(phylum);
-        archive(kingdom);
+        archive(taxnames_string);
+        archive(taxid_string);
         archive(user_bin);
         archive(seq_len);
     }

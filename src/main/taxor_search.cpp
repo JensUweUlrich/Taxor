@@ -185,7 +185,6 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
             auto & result = counter.bulk_contains(hashes, threshold); // Results contains user bin IDs
             hashes.clear();
             // write one line per reference match 
-            double max_ratio = 0.0;
             if (result.empty())
             {
                 result_string += id + '\t';
@@ -219,15 +218,13 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
                     result_string += '\t';
                     result_string += std::to_string(count.second);
                     result_string += '\t';
-                    double rate = static_cast<double>(count.second-fp_correction) / static_cast<double>(hash_count);
-                    result_string += format(rate, 3);//std::to_string(count.second-fp_correction);
+                    result_string += index.species().at(user_bin_index[count.first]).taxnames_string;
+                    result_string += '\t';
+                    result_string += index.species().at(user_bin_index[count.first]).taxid_string;
                     result_string += '\n';
-                    if (rate > max_ratio)
-                        max_ratio = rate;
                 }
             }
             count_mutex.lock();
-            mean_sum += max_ratio;
             reads++;
             count_mutex.unlock();
             /*
@@ -277,9 +274,6 @@ void search_hixf(taxor::search::configuration const config)
     search_args.threshold = config.threshold;
     search_args.threads = config.threads;
     search_args.seq_error_rate = config.error_rate;
-    // TODO: should be set after loading the index
-	//search_args.compute_syncmer = false;
-	//search_args.threshold = 0.2;
     
 	auto index = taxor_index<hixf_t>{};
     search_single(search_args, std::move(index));
