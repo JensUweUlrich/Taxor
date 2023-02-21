@@ -6,6 +6,7 @@
 #include "taxor_profile.hpp"
 #include "search_results.hpp"
 #include <taxutil.hpp>
+#include <profile_output.hpp>
 
 #include <ankerl/unordered_dense.h>
 
@@ -31,7 +32,24 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::profile::c
                       "\"[filepath] [tab] [weight/count]\".",*/
                       seqan3::option_spec::required);
 
-    parser.add_option(config.report_file, '\0', "output-file", "A file name for the resulting output.");
+    parser.add_option(config.report_file, '\0', "cami-report-file", 
+                      "output file reporting genomic abundances in CAMI profiling format"
+                      "This is the relative genome abundance in terms of the genome copy number for the respective TAXID in the overall sample."
+                      "Note that this is not identical to the relative abundance in terms of assigned base pairs.",
+                      seqan3::option_spec::required);
+
+    parser.add_option(config.sequence_abundance_file, '\0', "seq-abundance-file", 
+                      "output file reporting sequence abundance in CAMI profiling format (including unclassified reads)"
+                      "This is the relative sequence abundance in terms of sequenced base pairs for the respective TAXID in the overall sample."
+                      "Note that this is not identical to the genomic abundance in terms of genome copy number for the respective TAXID.");
+
+    parser.add_option(config.binning_file, '\0', "binning-file", 
+                      "output file reporting read to taxa assignments in CAMI binning format",
+                      seqan3::option_spec::required);
+
+    parser.add_option(config.sample_id, '\0', "sample-id", 
+                      "Identifier of the analyzed sample",
+                      seqan3::option_spec::required);
 
     parser.add_option(config.threads,
                       '\0', "threads",
@@ -53,6 +71,20 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::profile::c
                     seqan3::option_spec::hidden);
 }
 
+std::vector<std::string> str_split(std::string &str, char delimiter)
+{
+
+    std::stringstream str_stream(str);
+    std::string segment;
+    std::vector<std::string> seglist;
+
+    while(std::getline(str_stream, segment, delimiter))
+    {
+        seglist.push_back(segment);
+    }
+
+    return std::move(seglist);
+}
 
 std::map<std::string, std::vector<taxonomy::Search_Result>> parse_search_results(std::string const filepath,
                                                                     std::map<std::string, std::pair<std::string, std::string>> &taxpath)
@@ -76,6 +108,7 @@ std::map<std::string, std::vector<taxonomy::Search_Result>> parse_search_results
         if (line[1].compare("-") == 0)
         {
             res.taxid = "-";
+            res.query_len = std::stoull(line[5]);
         }
         else
         {
@@ -337,7 +370,7 @@ std::map<std::string, std::map<std::string, double>> calculate_log_likelihoods(s
     return std::move(likelihoods);
 }
 
-void update_log_prior_probabilities(std::map<std::string, double> &log_priors,
+double update_log_prior_probabilities(std::map<std::string, double> &log_priors,
                                     std::map<std::string, size_t> & taxa,
                                     std::map<std::string, std::vector<taxonomy::Search_Result>> &profile_results)
 {
@@ -346,37 +379,109 @@ void update_log_prior_probabilities(std::map<std::string, double> &log_priors,
         ref_nts.insert(std::move(std::make_pair(t.first, 0)));
 
     // for each taxon sum all lengths of matching reads
+    size_t all_nts{0};
+    size_t unclassified_nts{0};
     for (auto &read : profile_results)
     {
+        all_nts += read.second.at(0).query_len;
         if (read.second.at(0).taxid.compare("-") == 0)
+        {
+            unclassified_nts += read.second.at(0).query_len;
             continue;
+        }
         for (auto &ref : read.second)
         {
             ref_nts.at(ref.taxid) += ref.query_len;
         }
     }
+    
     // calculate average depth of coverage for each taxon
     // sum of all matched read lengths divided by length of taxon reference sequence
-    double sum_avg_cov{0.0};
+    /*double sum_avg_cov{0.0};
     for (auto & t : ref_nts)
     {
         log_priors.at(t.first) = static_cast<double>(t.second) / static_cast<double>(taxa.at(t.first));
         sum_avg_cov += log_priors.at(t.first);
     }
+    */
 
     // calculate relative genomic abundance for each taxon
     // divide average coverage of each taxon by the sum of average coverage of all taxa
     for (auto &t : log_priors)
     {
-        log_priors.at(t.first) = log(t.second + 0.000000000001) - log(sum_avg_cov);
+        // only for genome relative abundance
+        //log_priors.at(t.first) = log(t.second + 0.000000000001) - log(sum_avg_cov);
+
+        // 2nd version uses nucleotide abundance
+        log_priors.at(t.first) = log(static_cast<double>(ref_nts.at(t.first)) + 0.000000000001) - log(static_cast<double>(all_nts));
     }
+
+    return log(static_cast<double>(unclassified_nts) + 0.000000000001) - log(static_cast<double>(all_nts));
 
 }
 
-void calculate_higher_rank_abundances(std::map<std::string, size_t> & taxa,
-                                      std::map<std::string, std::vector<taxonomy::Search_Result>> &profile_results,
-                                      std::map<std::string, std::pair<std::string, std::string>> &taxpath)
+std::map<std::string, taxonomy::Profile_Output> calculate_higher_rank_abundances(std::map<std::string, double> &species_abundances,
+                                                            std::map<std::string, std::pair<std::string, std::string>> &taxpath)
 {
+    std::map<std::string, taxonomy::Profile_Output> rank_profiles{};
+    for (auto &sp : species_abundances)
+    {
+
+        if (sp.second == 0) continue;
+        if (sp.first.compare("unclassified") == 0)
+        {
+            taxonomy::Profile_Output profile{};
+            profile.taxid = sp.first;
+            profile.percentage = sp.second;
+            rank_profiles.insert(std::move(std::pair(sp.first, std::move(profile))));
+            continue;
+        }
+
+        std::vector<std::string> taxid_path = str_split(taxpath.at(sp.first).first,';');
+        std::vector<std::string> taxname_path = str_split(taxpath.at(sp.first).second,';');
+        for (size_t index = 0; index < taxid_path.size();++index)
+        {
+
+            if (!rank_profiles.contains(taxid_path[index]))
+            {
+                taxonomy::Profile_Output profile{};
+                profile.taxid = taxid_path[index];
+                profile.taxid_string = taxid_path[0];
+                profile.taxname_string = taxname_path[0].substr(3);
+                for (size_t index2 = 1; index2 <= index; ++index2)
+                {
+                    profile.taxid_string += "|";
+                    profile.taxid_string += taxid_path[index2];
+                    profile.taxname_string += "|";
+                    profile.taxname_string += taxname_path[index2].substr(3);
+                }
+
+                profile.percentage = 0.0;
+
+                if (taxname_path[index].substr(0, 1).compare("s") == 0)
+				    profile.rank = "species";
+			    else if(taxname_path[index].substr(0, 1).compare("g") == 0)
+					profile.rank = "genus";
+				else if(taxname_path[index].substr(0, 1).compare("f") == 0)
+					profile.rank = "family";
+				else if(taxname_path[index].substr(0, 1).compare("o") == 0)
+					profile.rank = "order";
+				else if(taxname_path[index].substr(0, 1).compare("c") == 0)
+					profile.rank = "class";
+				else if(taxname_path[index].substr(0, 1).compare("p") == 0)
+					profile.rank = "phylum";
+				else if(taxname_path[index].substr(0, 1).compare("k") == 0)
+					profile.rank = "superkingdom";
+
+
+                rank_profiles.insert(std::move(std::pair(taxid_path[index], std::move(profile))));
+            }
+
+            rank_profiles.at(taxid_path[index]).percentage += species_abundances.at(sp.first);
+        }
+    }
+
+    return std::move(rank_profiles);
     
 }
 
@@ -389,6 +494,7 @@ std::map<std::string, double> expectation_maximization(size_t iterations,
     std::map<std::string, std::map<std::string, double>> log_likelihoods = calculate_log_likelihoods(search_results);
     double cond_log_likelihood = -__DBL_MAX__;
     size_t iter_step = 0;
+    double unclassified_abundance{0.0};
     while(iter_step < iterations)
     {
         double new_cond_log_likelihood = 0;
@@ -424,7 +530,7 @@ std::map<std::string, double> expectation_maximization(size_t iterations,
         }
         
         // update referencs abundances (priors)
-        update_log_prior_probabilities(log_priors, taxa, profile_results);
+        unclassified_abundance = update_log_prior_probabilities(log_priors, taxa, profile_results);
         double diff = new_cond_log_likelihood - cond_log_likelihood;
         if (diff < abs(log(0.0001)))
             break;
@@ -434,6 +540,7 @@ std::map<std::string, double> expectation_maximization(size_t iterations,
     }
     std::cout << "Number of EM steps needed: " << iter_step << std::endl;
 
+    log_priors.insert(std::move(std::make_pair("unclassified", unclassified_abundance)));
     for (auto & t : log_priors)
     {
         log_priors.at(t.first) = exp(t.second);
@@ -442,35 +549,90 @@ std::map<std::string, double> expectation_maximization(size_t iterations,
     return std::move(log_priors);
 }
 
+void calculate_relative_genomic_abundances(std::map<std::string, double> &log_priors,
+                                           std::map<std::string, size_t> & taxa,
+                                           std::map<std::string, std::vector<taxonomy::Search_Result>> &profile_results)
+{
+    log_priors.clear();
+    std::map<std::string, uint64_t> ref_nts{};
+    for (auto & t : taxa)
+    {
+        ref_nts.insert(std::move(std::make_pair(t.first, 0)));
+        log_priors.insert(std::move(std::make_pair(t.first, 0.0)));
+    }
+
+    // for each taxon sum all lengths of matching reads
+    for (auto &read : profile_results)
+    {
+        if (read.second.at(0).taxid.compare("-") == 0)
+            continue;
+        for (auto &ref : read.second)
+        {
+            ref_nts.at(ref.taxid) += ref.query_len;
+        }
+    }
+    
+    // calculate average depth of coverage for each taxon
+    // sum of all matched read lengths divided by length of taxon reference sequence
+    double sum_avg_cov{0.0};
+    for (auto & t : ref_nts)
+    {
+        log_priors.at(t.first) = static_cast<double>(t.second) / static_cast<double>(taxa.at(t.first));
+        sum_avg_cov += log_priors.at(t.first);
+    }
+    
+
+    // calculate relative genomic abundance for each taxon
+    // divide average coverage of each taxon by the sum of average coverage of all taxa
+    for (auto &t : log_priors)
+    {
+        // only for genome relative abundance
+        log_priors.at(t.first) = log(t.second + 0.000000000001) - log(sum_avg_cov);
+    }
+
+    for (auto & t : log_priors)
+    {
+        log_priors.at(t.first) = exp(t.second);
+    }
+
+}
+
 void tax_profile(taxor::profile::configuration& config)
 {
     // <taxid, <taxid_string, taxname_string>>
     std::map<std::string, std::pair<std::string, std::string>> taxpath{};
     std::map<std::string, std::vector<taxonomy::Search_Result>> search_results = parse_search_results(config.search_file, taxpath);
-    ankerl::unordered_dense::set<std::string> ref_unique_mappings = get_refs_with_uniquely_mapping_reads(search_results);
+    //ankerl::unordered_dense::set<std::string> ref_unique_mappings = get_refs_with_uniquely_mapping_reads(search_results);
 
     //std::cout << ref_unique_mappings.size() << std::endl;
     //remove_matches_to_nonunique_refs(search_results, ref_unique_mappings);
     std::map<std::string, size_t> found_taxa = filter_ref_associations(search_results);
     std::map<std::string, std::vector<taxonomy::Search_Result>> profile_results{};
+    // returns nucleotide abundances
     std::map<std::string, double> tax_abundances = expectation_maximization(1000, found_taxa, search_results, profile_results);
-    
+
     for (auto & t: tax_abundances)
     {
-        if (t.second >= 0.000001)
-        std::cout << t.first << "\t" << t.second << std::endl;
+        if (t.second < 0.000001)
+            t.second = 0.0;
+    }
+    std::map<std::string, taxonomy::Profile_Output> rank_profiles = calculate_higher_rank_abundances(tax_abundances,taxpath);
+    taxonomy::write_sequence_abundance_file(config.sequence_abundance_file, rank_profiles, config.sample_id);
+
+    calculate_relative_genomic_abundances(tax_abundances, found_taxa, profile_results);
+
+    for (auto & t: tax_abundances)
+    {
+        if (t.second < 0.000001)
+            t.second = 0.0;
     }
 
-    size_t unclassified = 0;
-    for (auto & read : profile_results)
-    {
-        if (read.second.at(0).taxid.compare("-") == 0)
-        {
-            unclassified++;
-            std::cout << read.second.at(0).query_len << std::endl;
-        }
-    }
-    std::cout << "Unclassified : " << unclassified << " / " << profile_results.size() << std::endl;
+    rank_profiles.clear();
+    rank_profiles = calculate_higher_rank_abundances(tax_abundances,taxpath);
+    
+    taxonomy::write_biobox_profiling_file(config.report_file, rank_profiles, config.sample_id);
+    taxonomy::write_biobox_binning_file(config.binning_file, profile_results, config.sample_id);
+
 }
 
 int execute(seqan3::argument_parser & parser)

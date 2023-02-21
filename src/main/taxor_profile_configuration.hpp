@@ -8,8 +8,10 @@ namespace taxor::profile
 struct configuration
 {
     std::string search_file{};
-    std::string taxonomy_file{};
+    std::string binning_file{};
     std::string report_file{};
+    std::string sequence_abundance_file{};
+    std::string sample_id{};
     //double threshold{-1.0};
     //double error_rate{0.04};
     uint8_t threads{1u};

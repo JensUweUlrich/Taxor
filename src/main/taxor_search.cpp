@@ -74,13 +74,6 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::search::co
                     seqan3::option_spec::hidden);
 }
 
-std::string format(float f, int digits) {
-    std::ostringstream ss;
-    ss.precision(digits);
-    ss << f;
-    return ss.str();
-}
-
 void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && index)
 {
     //constexpr bool is_ibf = std::same_as<index_t, raptor_index<index_structure::ibf>>
@@ -188,7 +181,8 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
             if (result.empty())
             {
                 result_string += id + '\t';
-                result_string += "-\n";
+                result_string += "-\t-\t-\t-\t";
+                result_string += std::to_string(seq.size()) + "\n";
             }
             else{
                 uint64_t max_count = 0;
