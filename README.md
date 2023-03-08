@@ -3,12 +3,13 @@
 ```
 genome_updater.sh \
     -d "refseq"\
-    -g "viral" \
+    -g "archaea,bacteria,viral" \
     -c "all" \
-    -l "all" \
+    -l "complete genome,chromosome" \
     -f "genomic.fna.gz" \
-    -o "refseq-viral" \
+    -o "refseq-abv" \
     -t 12 \
+    -A "species:1" \
     -m -a -p
 
 # cd to 2021-09-30_19-35-19
