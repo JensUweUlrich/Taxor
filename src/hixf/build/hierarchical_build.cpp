@@ -46,22 +46,74 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
     {
         auto const & record = current_node_data.remaining_records[i];
 
+        // debugging only
+        /*for (auto const & filename : record.filenames)
+        {
+            if (filename.compare("files/GCF_000147815.2_ASM14781v3_genomic.fna.gz") == 0)
+            {
+                seqan3::debug_stream << "IXF vector index: " << ixf_pos << "\n";
+                investigate.emplace(ixf_pos);
+                compute_hashes(test_hashes, arguments, record);
+            }
+        }
+        */
+        // add single bin
         if (is_root && record.number_of_bins.back() == 1) // no splitting needed
         {
-            insert_into_bins(arguments, record, node_hashes);
+            //insert_into_bins(arguments, record, node_hashes);
+            // compute hashes and create temp file
+            auto const bin_index = static_cast<size_t>(record.bin_indices.back());
+            ankerl::unordered_dense::set<size_t> hashes{};
+            compute_hashes(hashes, arguments, record);
+
+            create_temp_hash_file(ixf_pos, bin_index ,hashes);
+
+            // update maximum bin size if this bin is largest
+            if (hashes.size() > current_node_data.max_bin_hashes)
+                current_node_data.max_bin_hashes = hashes.size();
+
+            hashes.clear();
         }
         else
         {
             ankerl::unordered_dense::set<size_t> hashes{};
             compute_hashes(hashes, arguments, record);
-            // only insert into hashes and parent_hashes and not into IXF directly
-            insert_into_bins(hashes, node_hashes, record.number_of_bins.back(), record.bin_indices.back());
+            if (is_root)
+            {
+                size_t const chunk_size = hashes.size() / record.number_of_bins.back() + 1;
+                size_t chunk_number{};
+                // this is a split bin 
+                // create one temp file per splitted bin
+                for (auto chunk : hashes | seqan3::views::chunk(chunk_size))
+                {
+                    assert(chunk_number < record.number_of_bins.back());
+                    size_t bin_idx = record.bin_indices.back() + chunk_number;
+                    ++chunk_number;
+                    ankerl::unordered_dense::set<size_t> tmp_hashes{};
+                    for (size_t const value : chunk)
+                    {
+                        tmp_hashes.insert(value);
+                    }
+                    // update maximum bin size if this split bin is largest
+                    if (tmp_hashes.size() > current_node_data.max_bin_hashes)
+                        current_node_data.max_bin_hashes = tmp_hashes.size();
+
+                    create_temp_hash_file(ixf_pos, bin_idx ,tmp_hashes);
+                }
+            }
+            else
+            {
+                // only insert into hashes and parent_hashes and not into IXF directly
+                insert_into_bins(hashes, node_hashes, record.number_of_bins.back(), record.bin_indices.back());
+            }
+            hashes.clear();
         }
 
         update_user_bins(data, filename_indices, record);
     }
 
-    for (int64_t p : ixf_positions)
+    // fo debugging only
+    /*for (int64_t p : ixf_positions)
     {
         if (investigate.contains(p))
         {
@@ -69,24 +121,18 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
             investigate.emplace(ixf_pos);
         }
     }
-
+    */
     // store hashes in parent_hash_set 
     // only wite hashes to file if parent is root IXF
     bool low_mem = false;
 
     if (is_root)
     {
-        for (auto & hashset : node_hashes)
-        {
-            //std::cout << hashset.size() << std::endl << std::flush;
-            if (hashset.size() > current_node_data.max_bin_hashes)
-                current_node_data.max_bin_hashes = hashset.size();
-        }
-        //std::cout << current_node_data.max_bin_hashes << std::endl << std::flush;
+        
         auto && ixf = construct_ixf(data, current_node, ixf_positions, node_hashes, ixf_pos);
 
         // only for debugging
-       /* std::vector<size_t> c{};
+        /*std::vector<size_t> c{};
         std::ranges::copy(test_hashes, std::back_inserter(c));
         typedef seqan3::interleaved_xor_filter<>::counting_agent_type< uint64_t > TIXFAgent;  
         for (uint64_t p : investigate)
@@ -96,18 +142,27 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
             TIXFAgent ixf_count_agent = data.hixf.ixf_vector[p].counting_agent< uint64_t >();
 		    auto result = ixf_count_agent.bulk_count(c);
             seqan3::debug_stream << "Index " << p << ": " << result << "\n";
+
+            
         }
         */
+        
         data.hixf.ixf_vector[ixf_pos] = std::move(ixf);
         data.hixf.next_ixf_id[ixf_pos] = std::move(ixf_positions);
         data.hixf.user_bins.bin_indices_of_ixf(ixf_pos) = std::move(filename_indices);
 
+        // only for debugging
+        /*TIXFAgent ixf_count_agent = data.hixf.ixf_vector[ixf_pos].counting_agent< uint64_t >();
+		auto result = ixf_count_agent.bulk_count(c);
+        seqan3::debug_stream << "Root Index " << ixf_pos << ": " << result << "\n";
+        */
     }
     else
     {
         // for level below root, we store hashes of the IXF in a temp file
         // reduces peak memory
         if (parent_is_root || low_mem)
+        //if (low_mem)
         {
             ankerl::unordered_dense::set<size_t> hashset{};
             for (auto hash_bin : node_hashes)
@@ -115,11 +170,13 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
                     hashset.insert(hash);
             
             current_node_data.number_of_hashes = hashset.size();
+
             create_temp_hash_file(ixf_pos, hashset);
+            hashset.clear();
         }
         else
         {
-            for (auto hash_bin : node_hashes)
+            for (auto &hash_bin : node_hashes)
             {
                 for (size_t hash : hash_bin)
                     parent_hashes.insert(hash);
@@ -148,7 +205,21 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
             data.hixf.ixf_vector[ixf_pos] = std::move(ixf);
             data.hixf.next_ixf_id[ixf_pos] = std::move(ixf_positions);
             data.hixf.user_bins.bin_indices_of_ixf(ixf_pos) = std::move(filename_indices);
+
+            /*std::vector<size_t> c{};
+            std::ranges::copy(test_hashes, std::back_inserter(c));
+            typedef seqan3::interleaved_xor_filter<>::counting_agent_type< uint64_t > TIXFAgent;  
+            for (uint64_t p : investigate)
+            {
+                if (p == 0)
+                    continue;
+                TIXFAgent ixf_count_agent = data.hixf.ixf_vector[p].counting_agent< uint64_t >();
+		        auto result = ixf_count_agent.bulk_count(c);
+                seqan3::debug_stream << "Index " << p << ": " << result << "\n";
+            }
+            */
         }
+        
     }
 
     node_hashes.clear();

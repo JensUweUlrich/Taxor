@@ -297,8 +297,8 @@ std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std:
                     // reassign otherwise
                     else
                     {
-                        (*it).taxid = explained_refs.at(pair.second.at(0).taxid);
-                        (*it).ref_len = taxa_lengths.at(pair.second.at(0).taxid);
+                        (*it).taxid = explained_refs.at((*it).taxid);
+                        (*it).ref_len = taxa_lengths.at((*it).taxid);
                     }
                 }
                 it++;

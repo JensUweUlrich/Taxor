@@ -39,11 +39,11 @@ seqan3::interleaved_xor_filter<> construct_ixf(std::vector<ankerl::unordered_den
     {
         std::vector<size_t> c{};
         std::ranges::copy(hash_bin, std::back_inserter(c));
-        tmp.emplace_back(c);
+        tmp.emplace_back(std::move(c));
     }
     seqan3::interleaved_xor_filter<> ixf{tmp};
 
-    return ixf;
+    return std::move(ixf);
 }
 
 
@@ -68,6 +68,9 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
             int64_t child_ixf_pos = ixf_positions[child_node_data.parent_bin_index];
             bins.insert(std::make_pair(child_node_data.parent_bin_index, child_ixf_pos));
     }
+
+    ankerl::unordered_dense::set<std::string> tmp_files{};
+
     while (!success)
     {
         success = true;
@@ -76,9 +79,7 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
 
             std::vector<size_t> hashes{};
             // read in hashes of child IXF and add all hashes to corresponding bin of current node IXF
-            read_from_temp_hash_file((*it).second, hashes);
-            //if ( hashes.size() > current_node_data.max_bin_hashes)
-            std::cerr << (*it).first << "\t" << (*it).second <<"\t" << hashes.size() << "\t" << current_node_data.max_bin_hashes << std::endl << std::flush;
+            read_from_temp_hash_file((*it).second, hashes, tmp_files);
             success = ixf.add_bin_elements((*it).first, hashes);
             if(!success)
                 break;
@@ -95,24 +96,25 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
 
         // iterate over new hashes
         // add hashes of bins for newly computed hashes on that level
-        
-        uint16_t bin_idx{0};
-        for (auto hash_bin : node_hashes)
+        for (uint16_t bin_idx = 0; bin_idx <= current_node_data.number_of_technical_bins; ++bin_idx)
         {
-            if (hash_bin.size() == 0)
-            {
-                bin_idx++;
+        
+            if (bins.contains(bin_idx))
                 continue;
-            }
             std::vector<size_t> c{};
-            std::ranges::copy(hash_bin, std::back_inserter(c));
+            read_from_temp_hash_file(current_node_ixf_pos, bin_idx, c, tmp_files);
+            if (c.size() == 0)
+                continue;
+            //std::ranges::copy(hash_bin, std::back_inserter(c));
             if ( c.size() > current_node_data.max_bin_hashes)
                 std::cerr << "False max number of bin hashes: " << c.size() << "\t" << current_node_data.max_bin_hashes << std::endl;
+
+            //std::cerr << bin_idx << "\t-\t" << c.size() << "\t" << current_node_data.max_bin_hashes << std::endl << std::flush;
             success = ixf.add_bin_elements(bin_idx, c);
             if(!success)
                 break;
 
-            bin_idx++;
+            //bin_idx++;
         }
         
         // reset seed if adding bin to IXF was not successful
@@ -122,9 +124,15 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
             ixf.set_seed();
             continue;
         }
-        //tmp_files.emplace_back(tmp_file);
+        
+
     }
     
+    for (auto &file : tmp_files)
+    {
+        if (std::filesystem::exists(file))
+            std::filesystem::remove(file);
+    }
 
     return std::move(ixf);
 }

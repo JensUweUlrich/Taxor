@@ -89,8 +89,9 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
     {
         load_index(index, arguments, index_io_time);
         arguments.compute_syncmer = index.use_syncmer();
-        arguments.shape = index.shape();
         arguments.shape_size = index.kmer_size();
+        arguments.window_size = index.window_size();
+        arguments.shape = seqan3::shape{seqan3::ungapped{arguments.shape_size}};
         // TODO: thresholding should be set based on used pattern
         //std::cout << arguments.threshold << std::endl << std::flush;
         hixf::threshold_parameters param = arguments.make_threshold_parameters();
@@ -153,6 +154,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         for (auto && [id, seq] : records | seqan3::views::slice(start, end))
         {
             result_string.clear();
+            
             if (seq.size() < 500)
                 continue;
             //result_string += id;
@@ -169,11 +171,12 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
                 auto minimiser_view = seq | hash_adaptor | std::views::common;
                 hashes.assign(minimiser_view.begin(), minimiser_view.end());
             }
+            //std::cout << id << "\t" << hashes.size() << std::endl << std::flush;
             size_t const hash_count{hashes.size()};
             size_t fp_correction = hash_count * 0.003;
             size_t threshold = thresholder.get(hash_count, (double)hash_count / ((double)seq.size() - (double)index.kmer_size() + 1.0));
             //std::cout << "Threshold: " << threshold << std::endl;
-            //std::cout << "Minimizer count: " << hash_count << std::endl;
+            //std::cout << "Minimizer count: " << hash_count << std::endl << std::flush;
 
             auto & result = counter.bulk_contains(hashes, threshold); // Results contains user bin IDs
             hashes.clear();

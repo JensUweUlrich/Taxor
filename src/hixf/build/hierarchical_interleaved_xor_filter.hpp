@@ -128,7 +128,7 @@ public:
     /*!\brief Returns a counting_agent_type to be used for counting.
      * \tparam value_t The type to use for the counters; must model std::integral.
      */
-    template <std::integral value_t = uint16_t>
+    template <std::integral value_t = uint32_t>
     counting_agent_type<value_t> counting_agent() const
     {
         return counting_agent_type<value_t>{*this};
@@ -298,6 +298,7 @@ private:
     {
        
         auto agent = hixf_ptr->ixf_vector[ixf_idx].template counting_agent<uint32_t>();
+
         auto & result = agent.bulk_count(values);
         uint32_t sum{};
         //uint32_t max_sum{0};
@@ -318,7 +319,10 @@ private:
                      current_filename_index != hixf_ptr->user_bins.filename_index(ixf_idx, bin + 1)) // end of split bin
             {
                 if (sum >= threshold)
+                {
                     result_buffer.emplace_back(std::make_pair(current_filename_index, sum));
+                    //std::cout << hixf_ptr->user_bins.user_bin_filenames.at(current_filename_index) << std::endl << std::flush;
+                }
                 sum = 0u;
             }
 
@@ -380,6 +384,15 @@ public:
 
         bulk_contains_impl(values, 0, threshold);
 
+        /*auto agent = hixf_ptr->ixf_vector[10].template counting_agent<uint32_t>();
+
+        std::vector<size_t> c{};
+        std::ranges::copy(values, std::back_inserter(c));
+
+	    auto & result = agent.bulk_count(c);
+        seqan3::debug_stream << "Root result: " << result << "\n";
+        */
+
         //std::ranges::sort(result_buffer); // TODO: necessary?
 
         return result_buffer;
@@ -421,6 +434,7 @@ private:
         for (size_t bin{}; bin < result.size(); ++bin)
         {
             sum += result[bin];
+            
             auto const current_filename_index = hixf_ptr->user_bins.filename_index(ixf_idx, bin);
 
             if (current_filename_index < 0) // merged bin
@@ -433,7 +447,9 @@ private:
                      current_filename_index != hixf_ptr->user_bins.filename_index(ixf_idx, bin + 1)) // end of split bin
             {
                 if (sum >= threshold)
+                {
                     result_buffer[current_filename_index] = sum;
+                }
                 sum = 0u;
             }
         }

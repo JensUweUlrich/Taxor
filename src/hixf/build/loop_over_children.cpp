@@ -55,6 +55,7 @@ void loop_over_children(std::vector<ankerl::unordered_dense::set<size_t>> & pare
             auto &child_node_data = data.node_map[child];
             if (child_node_data.number_of_hashes > current_node_data.max_bin_hashes)
                 current_node_data.max_bin_hashes = child_node_data.number_of_hashes;
+
         }
         
     };

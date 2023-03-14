@@ -20,7 +20,7 @@ void insert_into_bins(ankerl::unordered_dense::set<size_t> const & hashes,
         size_t bin_idx = bin_index + chunk_number;
         ++chunk_number;
         
-        for (size_t const value : chunk)
+        for (auto value : chunk)
         {
         //    ixf.emplace(value, bin_idx);
             ixf_bins.at(bin_idx).insert(value);

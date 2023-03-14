@@ -329,6 +329,8 @@ void build_hixf(taxor::build::configuration const config,
 	args.bin_file = std::filesystem::path{"binning.out"};
 	args.out_path = config.output_file_name;
     args.kmer_size = config.kmer_size;
+    args.window_size = config.kmer_size;
+    args.shape = seqan3::shape{seqan3::ungapped{args.kmer_size}};
     args.syncmer_size = config.syncmer_size;
     args.threads = config.threads;
 	args.compute_syncmer = config.use_syncmer;
@@ -336,7 +338,6 @@ void build_hixf(taxor::build::configuration const config,
         args.t_syncmer = ceil((args.kmer_size - args.syncmer_size) / 2) + 1;
 	
     hixf::build_data data{};
-   
    
     hixf::create_ixfs_from_chopper_pack(data, args);
     
@@ -368,6 +369,85 @@ void build_hixf(taxor::build::configuration const config,
     store_index(args.out_path, index);
 }
 
+uint64_t construct_and_query_ixf(size_t bins, size_t elements_per_bin)
+{
+	
+	
+	//ulrich::interleaved_xor_filter<> ixf(elems);
+	seqan3::interleaved_xor_filter<> ixf(bins, elements_per_bin);
+	std::vector<size_t> elems{};
+	while (true)
+	{
+		bool success = true;
+		for (int e = 0; e < bins ; ++e)
+		{
+
+            //if (e % 7 == 0 || e % 15 == 0)
+            //    continue;
+
+			std::vector<size_t> tmp{};
+			for (size_t i = 0; i < elements_per_bin; ++i)
+			{
+				size_t key = (e*elements_per_bin) + i;
+				tmp.emplace_back(key);
+			}
+			success = ixf.add_bin_elements(e, tmp);
+			if (!success)
+			{
+				ixf.clear();
+				ixf.set_seed();
+				std::cout << e << std::endl;
+				break;
+			}
+			if (e == 2)
+				elems=std::move(tmp);
+		}
+		if (success)
+			break;
+	}
+	
+	//std::cout << "Built IXF in " << ixf_construct.elapsed() << " seconds" << std::endl;
+
+	std::cout << ixf.bin_count() << std::endl;
+	std::cout << (double) ixf.bit_size() / (double) ixf.bin_count() << std::endl;
+	
+	typedef seqan3::interleaved_xor_filter<>::counting_agent_type< uint64_t > TIXFAgent;
+
+	auto agent = ixf.membership_agent();
+    auto & result = agent.bulk_contains(elems[0]);
+    seqan3::debug_stream << elems[0]  << "\t" << result << '\n';
+	TIXFAgent ixf_count_agent = ixf.counting_agent< uint64_t >();
+	//auto result = count_agent.bulk_count(readHs);
+	auto ixf_result = ixf_count_agent.bulk_count(elems);
+	
+	seqan3::debug_stream << ixf_result << "\n";
+/*	double fpr {0.0};
+	for (int i =0; i < ixf_result.size(); ++i)
+	{
+		if (i == 2)
+		{
+			std::cout << ixf_result[i] << "/" << elems.size() << std::endl;
+			return ixf_result[i];
+			continue;
+		}
+		fpr += (double) ixf_result[i] / (double) elements_per_bin;
+	}
+	fpr /= (double) (bins - 1);
+	std::cout << "FPR of the IXF: " << fpr << std::endl;
+	double mbytes = (double) ixf.bit_size() / (double) 8388608;
+	std::cout << "Size of the IXF: " << mbytes << " MBytes" << std::endl;
+	std::cout << "Queried " << elems.size() <<" keys in IXF in " << ixf_query.elapsed() << " seconds" << std::endl;
+	StopClock ixf_store{};
+	ixf_store.start();
+	std::string filter_file = "test.ixf";
+	
+	std::ofstream               os( filter_file, std::ios::binary );
+    cereal::BinaryOutputArchive archive( os );
+    archive( ixf );  
+	ixf_store.stop();
+	std::cout << "Stored IXF in " << ixf_store.elapsed() << " seconds" << std::endl;
+    */
+}
 
 int execute(seqan3::argument_parser & parser)
 {
@@ -396,6 +476,8 @@ int execute(seqan3::argument_parser & parser)
 
     return 0;
 */
+
+
     std::vector<taxonomy::Species> orgs = taxonomy::parse_refseq_taxonomy_file(config.input_file_name);
     // map filename to index of species in orgs vector 
     std::map<std::string, uint64_t> user_bin_map{};
