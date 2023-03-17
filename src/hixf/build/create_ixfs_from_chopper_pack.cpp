@@ -25,7 +25,7 @@ void create_ixfs_from_chopper_pack(build_data& data, build_arguments const & arg
 
     size_t const t_max{data.node_map[root].number_of_technical_bins};
 
-    hierarchical_build(root_hashes, root, data, arguments, true, false);
+    hierarchical_build(root_hashes, root, data, arguments, true, false, false);
 
     /*
 

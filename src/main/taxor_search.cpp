@@ -149,13 +149,13 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         // TODO: choose between minimizer and syncmers
         auto hash_adaptor = seqan3::views::minimiser_hash(arguments.shape,
                                                           seqan3::window_size{arguments.window_size},
-                                                          seqan3::seed{hixf::adjust_seed(arguments.shape_weight)});
+                                                          seqan3::seed{hixf::adjust_seed(arguments.shape.count())});
 
         for (auto && [id, seq] : records | seqan3::views::slice(start, end))
         {
             result_string.clear();
             
-            if (seq.size() < 500)
+            if (seq.size() < 2000)
                 continue;
             //result_string += id;
             //result_string += '\t';

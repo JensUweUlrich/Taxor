@@ -50,7 +50,7 @@ seqan3::interleaved_xor_filter<> construct_ixf(std::vector<ankerl::unordered_den
 seqan3::interleaved_xor_filter<> construct_ixf(build_data & data, 
                                                lemon::ListDigraph::Node const & current_node,
                                                std::vector<int64_t> & ixf_positions,
-                                               std::vector<ankerl::unordered_dense::set<size_t>> &node_hashes,
+                                               bool is_second,
                                                size_t const & current_node_ixf_pos)
 {
     auto &current_node_data = data.node_map[current_node];
@@ -71,6 +71,12 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
 
     ankerl::unordered_dense::set<std::string> tmp_files{};
 
+     ankerl::unordered_dense::set<size_t> hashset{};
+
+   
+            
+           
+
     while (!success)
     {
         success = true;
@@ -83,6 +89,12 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
             success = ixf.add_bin_elements((*it).first, hashes);
             if(!success)
                 break;
+            
+            if (is_second)
+            {
+                for (size_t hash : hashes)
+                    hashset.insert(hash);
+            }
 
         }
         // reset seed if adding bin to IXF was not successful
@@ -90,6 +102,7 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
         {   
             ixf.clear();
             ixf.set_seed();
+            hashset.clear();
             std::cerr << "set new seed" << std::endl << std::flush;
             continue;
         }
@@ -114,6 +127,12 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
             if(!success)
                 break;
 
+            if (is_second)
+            {
+                for (size_t hash : c)
+                    hashset.insert(hash);
+            }
+
             //bin_idx++;
         }
         
@@ -122,10 +141,18 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
         {   
             ixf.clear();
             ixf.set_seed();
+            hashset.clear();
             continue;
         }
         
+    }
 
+    if (is_second)
+    {
+        current_node_data.number_of_hashes = hashset.size();
+
+        create_temp_hash_file(current_node_ixf_pos, hashset);
+        hashset.clear();
     }
     
     for (auto &file : tmp_files)

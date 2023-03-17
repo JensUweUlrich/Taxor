@@ -15,6 +15,7 @@ void loop_over_children(std::vector<ankerl::unordered_dense::set<size_t>> & pare
                         lemon::ListDigraph::Node & current_node,
                         build_data & data,
                         build_arguments const & arguments,
-                        bool is_root);
+                        bool is_root,
+                        bool is_second);
 
 } 

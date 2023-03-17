@@ -162,13 +162,22 @@ void remove_matches_to_nonunique_refs(std::map<std::string, std::vector<taxonomy
         {   
             size_t count_before = pair.second.size();
             search_iterator = pair.second.begin();
+            uint64_t query_len = 0;
             while (search_iterator != pair.second.end())
             {
+                query_len = (*search_iterator).query_len;
                 if (!ref_unique_mappings.contains((*search_iterator).taxid))
                     search_iterator = pair.second.erase(search_iterator);
                 else
                     search_iterator++;
             }
+
+            if (pair.second.size() == 0)
+            {
+                taxonomy::Search_Result res{pair.first,"-",0,query_len,0,0};
+                pair.second.emplace_back(std::move(res));
+            }
+
             if (count_before != pair.second.size())
                 std::cout << pair.first << "\t" << count_before << "\t" << pair.second.size() << std::endl;
         }
@@ -602,10 +611,11 @@ void tax_profile(taxor::profile::configuration& config)
     // <taxid, <taxid_string, taxname_string>>
     std::map<std::string, std::pair<std::string, std::string>> taxpath{};
     std::map<std::string, std::vector<taxonomy::Search_Result>> search_results = parse_search_results(config.search_file, taxpath);
-    //ankerl::unordered_dense::set<std::string> ref_unique_mappings = get_refs_with_uniquely_mapping_reads(search_results);
 
+    ankerl::unordered_dense::set<std::string> ref_unique_mappings = get_refs_with_uniquely_mapping_reads(search_results);
     //std::cout << ref_unique_mappings.size() << std::endl;
-    //remove_matches_to_nonunique_refs(search_results, ref_unique_mappings);
+    remove_matches_to_nonunique_refs(search_results, ref_unique_mappings);
+
     std::map<std::string, size_t> found_taxa = filter_ref_associations(search_results);
     std::map<std::string, std::vector<taxonomy::Search_Result>> profile_results{};
     // returns nucleotide abundances
@@ -613,7 +623,7 @@ void tax_profile(taxor::profile::configuration& config)
 
     for (auto & t: tax_abundances)
     {
-        if (t.second < 0.000001)
+        if (t.second < 0.0001)
             t.second = 0.0;
     }
     std::map<std::string, taxonomy::Profile_Output> rank_profiles = calculate_higher_rank_abundances(tax_abundances,taxpath);
@@ -623,7 +633,7 @@ void tax_profile(taxor::profile::configuration& config)
 
     for (auto & t: tax_abundances)
     {
-        if (t.second < 0.000001)
+        if (t.second < 0.0001)
             t.second = 0.0;
     }
 

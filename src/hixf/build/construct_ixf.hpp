@@ -27,7 +27,7 @@ seqan3::interleaved_xor_filter<> construct_ixf(ankerl::unordered_dense::set<size
 seqan3::interleaved_xor_filter<> construct_ixf(build_data & data, 
                                                lemon::ListDigraph::Node const & current_node,
                                                std::vector<int64_t> & ixf_positions,
-                                               std::vector<ankerl::unordered_dense::set<size_t>> &node_hashes,
+                                               bool is_second,
                                                size_t const & current_node_ixf_position);
 
 seqan3::interleaved_xor_filter<> construct_ixf(std::vector<ankerl::unordered_dense::set<size_t>> &node_hashes);

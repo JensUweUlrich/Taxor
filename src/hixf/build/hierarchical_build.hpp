@@ -15,6 +15,7 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
                           build_data & data,
                           build_arguments const & arguments,
                           bool is_root,
-                          bool parent_is_root);
+                          bool is_second,
+                          bool is_third);
 
 } 

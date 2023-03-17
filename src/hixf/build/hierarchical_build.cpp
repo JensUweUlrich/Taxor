@@ -22,7 +22,8 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
                           build_data & data,
                           build_arguments const & arguments,
                           bool is_root,
-                          bool parent_is_root)
+                          bool is_second,
+                          bool is_third)
 {
     auto & current_node_data = data.node_map[current_node];
     
@@ -40,7 +41,7 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
 
     // parse all other children (merged bins) of the current ixf
     // does nothing on lowest level
-    loop_over_children(node_hashes, ixf_positions, current_node, data, arguments, is_root);
+    loop_over_children(node_hashes, ixf_positions, current_node, data, arguments, is_root, is_second);
 
     for (size_t i = 0; i < current_node_data.remaining_records.size(); ++i)
     {
@@ -58,7 +59,7 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
         }
         */
         // add single bin
-        if (is_root && record.number_of_bins.back() == 1) // no splitting needed
+        if ((is_root || is_second) && record.number_of_bins.back() == 1) // no splitting needed
         {
             //insert_into_bins(arguments, record, node_hashes);
             // compute hashes and create temp file
@@ -78,7 +79,7 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
         {
             ankerl::unordered_dense::set<size_t> hashes{};
             compute_hashes(hashes, arguments, record);
-            if (is_root)
+            if (is_root || is_second)
             {
                 size_t const chunk_size = hashes.size() / record.number_of_bins.back() + 1;
                 size_t chunk_number{};
@@ -126,10 +127,10 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
     // only wite hashes to file if parent is root IXF
     bool low_mem = false;
 
-    if (is_root)
+    if (is_root || is_second)
     {
         
-        auto && ixf = construct_ixf(data, current_node, ixf_positions, node_hashes, ixf_pos);
+        auto && ixf = construct_ixf(data, current_node, ixf_positions, is_second, ixf_pos);
 
         // only for debugging
         /*std::vector<size_t> c{};
@@ -161,7 +162,7 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
     {
         // for level below root, we store hashes of the IXF in a temp file
         // reduces peak memory
-        if (parent_is_root || low_mem)
+        if (is_third)
         //if (low_mem)
         {
             ankerl::unordered_dense::set<size_t> hashset{};
@@ -192,7 +193,7 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
                     current_node_data.max_bin_hashes = hashset.size();
             }
             //std::cout << current_node_data.max_bin_hashes << std::endl << std::flush;
-            auto && ixf = construct_ixf(data, current_node, ixf_positions, node_hashes, ixf_pos);
+            auto && ixf = construct_ixf(data, current_node, ixf_positions, is_second, ixf_pos);
             data.hixf.ixf_vector[ixf_pos] = std::move(ixf);
             data.hixf.next_ixf_id[ixf_pos] = std::move(ixf_positions);
             data.hixf.user_bins.bin_indices_of_ixf(ixf_pos) = std::move(filename_indices);

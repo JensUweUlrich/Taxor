@@ -16,7 +16,8 @@ void loop_over_children(std::vector<ankerl::unordered_dense::set<size_t>> & pare
                         lemon::ListDigraph::Node &current_node,
                         build_data & data,
                         build_arguments const & arguments,
-                        bool is_root)
+                        bool is_root,
+                        bool is_second)
 {
     auto & current_node_data = data.node_map[current_node];
     std::vector<lemon::ListDigraph::Node> children{};
@@ -29,15 +30,15 @@ void loop_over_children(std::vector<ankerl::unordered_dense::set<size_t>> & pare
 
     size_t const number_of_mutex = (data.node_map[current_node].number_of_technical_bins + 63) / 64;
     std::vector<std::mutex> local_ixf_mutex(number_of_mutex);
-    bool parent_is_root{false};
-    if (is_root)
-        parent_is_root = true;
+    bool is_third{false};
+    if (is_second)
+        is_third = true;
     
     auto worker = [&](auto && index, auto &&)
     {
         auto & child = children[index];
         ankerl::unordered_dense::set<size_t> hashes{};
-        size_t const ixf_pos = hierarchical_build(hashes, child, data, arguments, false, parent_is_root); // gets back 793 for low level IXF
+        size_t const ixf_pos = hierarchical_build(hashes, child, data, arguments, false, is_root, is_third); // gets back 793 for low level IXF
         auto parent_bin_index = data.node_map[child].parent_bin_index;
         {
             size_t const mutex_id{parent_bin_index / 64};
@@ -46,7 +47,7 @@ void loop_over_children(std::vector<ankerl::unordered_dense::set<size_t>> & pare
             // insert into parent_hashes if current node is not root
             // parent_hashes of level under root need to be stored on disk
             // to reduce peak memory
-            if (!is_root)
+            if (!is_root && !is_second)
                 insert_into_bins(hashes, parent_hashes, 1, parent_bin_index);
             
             // number of hashes stored in child IXF equals number of hashes in one corresponding bin
