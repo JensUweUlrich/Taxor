@@ -268,6 +268,21 @@ std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std:
         }
     }
 
+    bool found = true;
+    while (found)
+    {
+        found = false;
+        for (auto & exp_ref : explained_refs)
+        {
+            if (explained_refs.contains(exp_ref.second))
+            {
+                exp_ref.second = explained_refs.at(exp_ref.second);
+                found = true;
+            }
+        }
+
+    }
+
     // iterate over search results and filter results of ambiguous mappings
     // reassign unique mappings of refs explained by another ref
     for (auto & pair : search_results)
@@ -514,13 +529,12 @@ std::map<std::string, double> expectation_maximization(size_t iterations,
             std::vector<taxonomy::Search_Result> best_match{};
             for (auto &res : read.second)
             {   
-
                 if (read.second.at(0).taxid.compare("-") == 0)
                 {
                     best_match.emplace_back(res);
                     break;
                 }
-               
+
                 double post = log_likelihoods.at(read.first).at(res.taxid) + log_priors.at(res.taxid);
 
                 new_cond_log_likelihood += post;
@@ -537,7 +551,6 @@ std::map<std::string, double> expectation_maximization(size_t iterations,
             }
             profile_results.insert(std::move(std::make_pair(read.first, std::move(best_match))));
         }
-        
         // update referencs abundances (priors)
         unclassified_abundance = update_log_prior_probabilities(log_priors, taxa, profile_results);
         double diff = new_cond_log_likelihood - cond_log_likelihood;
@@ -613,10 +626,11 @@ void tax_profile(taxor::profile::configuration& config)
     std::map<std::string, std::vector<taxonomy::Search_Result>> search_results = parse_search_results(config.search_file, taxpath);
 
     ankerl::unordered_dense::set<std::string> ref_unique_mappings = get_refs_with_uniquely_mapping_reads(search_results);
-    //std::cout << ref_unique_mappings.size() << std::endl;
+   
     remove_matches_to_nonunique_refs(search_results, ref_unique_mappings);
-
+    std::cout << ref_unique_mappings.size() << std::endl;   
     std::map<std::string, size_t> found_taxa = filter_ref_associations(search_results);
+    std::cout << "ref associations filtered" << std::endl;
     std::map<std::string, std::vector<taxonomy::Search_Result>> profile_results{};
     // returns nucleotide abundances
     std::map<std::string, double> tax_abundances = expectation_maximization(1000, found_taxa, search_results, profile_results);
