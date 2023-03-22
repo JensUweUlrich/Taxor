@@ -155,7 +155,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         {
             result_string.clear();
             
-            if (seq.size() < 2000)
+            if (seq.size() < 1000)
                 continue;
             //result_string += id;
             //result_string += '\t';

@@ -152,6 +152,10 @@ ankerl::unordered_dense::set<std::string> get_refs_with_uniquely_mapping_reads(s
     return std::move(ref_unique_mappings);
 }
 
+
+/**
+ *  Remove all ambiguous read-to-reference assignments where the reference has no unique mapping
+*/
 void remove_matches_to_nonunique_refs(std::map<std::string, std::vector<taxonomy::Search_Result>>& search_results,
                                       ankerl::unordered_dense::set<std::string>& ref_unique_mappings)
 {
@@ -160,7 +164,6 @@ void remove_matches_to_nonunique_refs(std::map<std::string, std::vector<taxonomy
     {
         if (pair.second.size() > 1)
         {   
-            size_t count_before = pair.second.size();
             search_iterator = pair.second.begin();
             uint64_t query_len = 0;
             while (search_iterator != pair.second.end())
@@ -177,11 +180,71 @@ void remove_matches_to_nonunique_refs(std::map<std::string, std::vector<taxonomy
                 taxonomy::Search_Result res{pair.first,"-",0,query_len,0,0};
                 pair.second.emplace_back(std::move(res));
             }
-
-            if (count_before != pair.second.size())
-                std::cout << pair.first << "\t" << count_before << "\t" << pair.second.size() << std::endl;
         }
     }
+}
+
+
+std::map<std::string,std::pair<uint64_t,uint64_t>> count_unique_ambiguous_mappings_per_reference(
+                                std::map<std::string, std::vector<taxonomy::Search_Result>>& search_results)
+{
+    // <taxid, <unique,ambiguous>>
+    std::map<std::string,std::pair<uint64_t,uint64_t>> map_counts{};
+    for (auto & pair : search_results)
+    {
+        if (pair.second.size() == 1)
+        {
+            if (pair.second.at(0).taxid.compare("-") != 0)
+            {
+                if (!map_counts.contains(pair.second.at(0).taxid))
+                {
+                    map_counts.insert(std::move(std::make_pair(pair.second.at(0).taxid, std::move(std::make_pair(0,0)))));
+                }
+                map_counts.at(pair.second.at(0).taxid).first += 1;
+            }
+        }
+        else
+        {
+            for (auto & res : pair.second)
+            {
+                if (!map_counts.contains(res.taxid))
+                {
+                    map_counts.insert(std::move(std::make_pair(res.taxid, std::move(std::make_pair(0,0)))));
+                }
+                map_counts.at(res.taxid).second += 1;
+            }
+        }
+    }
+
+    return std::move(map_counts);
+}
+
+void remove_low_confidence_references(std::map<std::string, std::vector<taxonomy::Search_Result>>& search_results,
+                                      std::map<std::string,std::pair<uint64_t,uint64_t>>& map_counts,
+                                      uint8_t min_unique_mappings,
+                                      float min_fraction_unique)
+{
+    ankerl::unordered_dense::set<std::string> accepted_refs{};
+    for (auto & ref : map_counts)
+    {
+        /*if (ref.first.compare("2866282") == 0)
+            std::cout << "PS1: " << ref.second.first << "\t" << ref.second.second << "\t" <<
+            static_cast<float>(ref.second.first) / static_cast<float>(ref.second.first + ref.second.second) << "\t" <<
+            static_cast<float>(ref.second.first + ref.second.second) / static_cast<float>(search_results.size()) << std::endl;
+        if (ref.first.compare("208964") == 0)
+            std::cout << "aeruginosa: " << ref.second.first << "\t" << ref.second.second << "\t" <<
+            static_cast<float>(ref.second.first) / static_cast<float>(ref.second.first + ref.second.second) << "\t" <<
+            static_cast<float>(ref.second.first + ref.second.second) / static_cast<float>(search_results.size()) << std::endl;
+        if (ref.first.compare("2545800") == 0)
+            std::cout << "FDARGOS: " << ref.second.first << "\t" << ref.second.second << "\t" <<
+            static_cast<float>(ref.second.first) / static_cast<float>(ref.second.first + ref.second.second) << "\t" <<
+            static_cast<float>(ref.second.first + ref.second.second) / static_cast<float>(search_results.size()) << std::endl;
+        */
+        if (ref.second.first >= min_unique_mappings &&
+                static_cast<float>(ref.second.first) / static_cast<float>(ref.second.first + ref.second.second) >= min_fraction_unique)
+            accepted_refs.insert(ref.first);
+    }
+    remove_matches_to_nonunique_refs(search_results, accepted_refs);
 }
 
 /** 
@@ -625,19 +688,24 @@ void tax_profile(taxor::profile::configuration& config)
     std::map<std::string, std::pair<std::string, std::string>> taxpath{};
     std::map<std::string, std::vector<taxonomy::Search_Result>> search_results = parse_search_results(config.search_file, taxpath);
 
+    // 1st round of reference filtering
     ankerl::unordered_dense::set<std::string> ref_unique_mappings = get_refs_with_uniquely_mapping_reads(search_results);
-   
     remove_matches_to_nonunique_refs(search_results, ref_unique_mappings);
-    std::cout << ref_unique_mappings.size() << std::endl;   
+
+    // 2nd round of reference filtering
+    //std::map<std::string,std::pair<uint64_t,uint64_t>> map_counts = count_unique_ambiguous_mappings_per_reference(search_results);
+    // at least 3 uniquely mapped reads & at least 10% of all mappings unique
+    //remove_low_confidence_references(search_results, map_counts, 3, 0.001);
+   
     std::map<std::string, size_t> found_taxa = filter_ref_associations(search_results);
-    std::cout << "ref associations filtered" << std::endl;
+   
     std::map<std::string, std::vector<taxonomy::Search_Result>> profile_results{};
     // returns nucleotide abundances
     std::map<std::string, double> tax_abundances = expectation_maximization(1000, found_taxa, search_results, profile_results);
 
     for (auto & t: tax_abundances)
     {
-        if (t.second < 0.0001)
+        if (t.second < 0.001)
             t.second = 0.0;
     }
     std::map<std::string, taxonomy::Profile_Output> rank_profiles = calculate_higher_rank_abundances(tax_abundances,taxpath);
@@ -647,7 +715,7 @@ void tax_profile(taxor::profile::configuration& config)
 
     for (auto & t: tax_abundances)
     {
-        if (t.second < 0.0001)
+        if (t.second < 0.001)
             t.second = 0.0;
     }
 

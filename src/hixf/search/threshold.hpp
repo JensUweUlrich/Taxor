@@ -34,7 +34,7 @@ public:
         else if (arguments.use_syncmer)
         {
             threshold_kind = threshold_kinds::syncmer_model;
-            std::cout << "use syncmer-model" << std::endl << std::flush;
+            std::cout << "use syncmer model" << std::endl << std::flush;
         }
         else if (kmers_per_window == 1 && !arguments.fracminhash)
         {
