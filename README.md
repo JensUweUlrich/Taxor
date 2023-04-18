@@ -3,7 +3,7 @@
 ```
 genome_updater.sh \
     -d "refseq"\
-    -g "archaea,bacteria,viral" \
+    -g "archaea,bacteria,fungi,viral" \
     -c "all" \
     -l "complete genome,chromosome" \
     -f "genomic.fna.gz" \
@@ -18,7 +18,7 @@ genome_updater.sh \
 mkdir -p taxdump
 tar -zxvf taxdump.tar.gz -C taxdump
 
-cut -f 1,6,20 ../assembly_summary.txt \
+cut -f 1,7,20 ../assembly_summary.txt \
 | taxonkit lineage -i 2 -r -n -L --data-dir taxdump \
 | taxonkit reformat -I 2 -P -t --data-dir taxdump \
 | cut -f 1,2,3,4,6,7 > refseq_accessions_taxonomy.csv
