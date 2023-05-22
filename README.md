@@ -1,6 +1,6 @@
-<center><img src="Original Logo.png" alt="Taxonomic classification with XOR filters" width="800"/></center>
+<center><img src="Logo.png" alt="Taxonomic classification with XOR filters" width="500"/></center>
 
-# Taxor: ast and space-efficient taxonomic classification of long reads with hierarchical interleaved XOR filters
+# Taxor: Fast and space-efficient taxonomic classification of long reads with hierarchical interleaved XOR filters
 
 ## Citation
 
