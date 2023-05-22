@@ -1,4 +1,4 @@
-<center><img src="Logo.png" alt="Taxonomic classification with XOR filters" width="500"/></center>
+<center><img src="Logo.png" alt="Taxonomic classification with XOR filters" width="300"/></center>
 
 # Taxor: Fast and space-efficient taxonomic classification of long reads with hierarchical interleaved XOR filters
 
