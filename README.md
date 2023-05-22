@@ -6,6 +6,23 @@
 
 ## Table of contents
 
+* [Description](#description)
+* [Installation](#installation)
+* [Commands](#commands)
+* [Quickstart](#quickstart)
+
+## Installation
+
+The easiest way is to simply download [executable binaries](https://github.com/shenwei356/kmcp/releases) for Linux x86_64. 
+
+## Commands
+
+|Subcommand                                                                |Function                                                        |
+|:-------------------------------------------------------------------------|:---------------------------------------------------------------|
+|[**build**](#build)                                                       | Construct HIXF index from fasta reference files                |
+|[**search**](#search)                                                     | Search sequences against a database index                      |
+|[**profile**](#profile)                                                   | Generate the taxonomic profile from search results             |
+
 ```
 genome_updater.sh \
     -d "refseq"\
