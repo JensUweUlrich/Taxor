@@ -11,9 +11,23 @@
 * [Commands](#commands)
 * [Usage](#usage)
 
+## <a name="description"></a>Description
+
+Taxor is a taxonomic classification and profiling tool that efficiently classifies DNA sequences against large sets of genomic reference sequences. 
+
 ## <a name="installation"></a>Installation
 
-The easiest way is to simply download [executable binaries](https://github.com/shenwei356/kmcp/releases) for Linux x86_64. 
+The easiest way is to simply download [executable binaries](https://github.com/shenwei356/kmcp/releases) for Linux x86_64. <br>
+However, you can also build Taxor on your own using the following commands. Just make sure that you have installed [CMake](https://cmake.org/) (>=3.16) and [GCC](https://gcc.gnu.org/) (>= 10).
+
+```
+git clone https://github.com/JensUweUlrich/Taxor.git
+cd Taxor
+mkdir build
+cd build
+cmake  ../src
+cmake --build . --config Release
+```
 
 ## <a name="commands"></a>Commands
 
