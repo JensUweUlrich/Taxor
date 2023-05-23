@@ -1,4 +1,4 @@
-<center><img src="Logo.png" alt="Taxonomic classification with XOR filters" width="300"/></center>
+<center><img src="img/Logo.png" alt="Taxonomic classification with XOR filters" width="300"/></center>
 
 # Taxor: Fast and space-efficient taxonomic classification of long reads with hierarchical interleaved XOR filters
 
@@ -26,7 +26,7 @@ The easiest way is to simply download [executable binaries](https://github.com/s
 
 ## <a name="usage"></a>Usage
 
-![](Workflow.png)
+![](img/Workflow.png)
 
 First download the reference sequences and taxonomy dump of the sequences from the NCBI using [genome_updater](https://github.com/pirovc/genome_updater). 
 ```
