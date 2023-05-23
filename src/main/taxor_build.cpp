@@ -41,26 +41,17 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::build::con
     parser.info.version = "0.1.0";
     parser.info.author = "Jens-Uwe Ulrich";
     parser.info.email = "jens-uwe.ulrich@hpi.de";
-    parser.info.short_description = "Creates and HIXF index of a given set of fasta files";
+    parser.info.short_description = "Creates an HIXF index of a given set of fasta files";
 
-    parser.info.description.emplace_back("Creates an HIXF index using either kmers, syncmers or FracMinHash sketches");
+    parser.info.description.emplace_back("Creates an HIXF index using either k-mers or syncmers");
 
     parser.add_subsection("Main options:");
     // -----------------------------------------------------------------------------------------------------------------
     parser.add_option(config.input_file_name,
-                      '\0', "input-file", "",
- /*                     "Provide the prefix you used for the output prefix in the chopper count --output-prefix option. "
-                      "If you have different means of estimating the k-mer counts of your input data, make sure that a "
-                      "file [INPUT-PREFIX].count exists. It needs to be tab-separated and consist of two columns: "
-                      "\"[filepath] [tab] [weight/count]\".",*/
+                      '\0', "input-file", "tab-separated-value file containing taxonomy information and reference file names",
                       seqan3::option_spec::required);
-    parser.add_list_item("", "Example file:");
-    parser.add_list_item("", "```");
-    parser.add_list_item("", "GCF_000839185.1 https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/839/185/GCF_000839185.1_ViralProj14174 Cowpox virus    k__Viruses;p__Nucleocytoviricota;c__Pokkesviricetes;o__Chitovirales;f__Poxviridae;g__Orthopoxvirus;s__Cowpox virus");
-    parser.add_list_item("", "GCF_000860085.1 https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/860/085/GCF_000860085.1_ViralProj15241 Vaccinia virus  k__Viruses;p__Nucleocytoviricota;c__Pokkesviricetes;o__Chitovirales;f__Poxviridae;g__Orthopoxvirus;s__Vaccinia virus");
-    parser.add_list_item("", "```");
 
-    parser.add_option(config.input_sequence_folder, '\0', "input-sequence_dir", "directory containing the fasta reference files");
+    parser.add_option(config.input_sequence_folder, '\0', "input-sequence-dir", "directory containing the fasta reference files");
 
     parser.add_option(config.output_file_name, '\0', "output-filename", "A file name for the resulting index.");
 
@@ -74,8 +65,7 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::build::con
 
     parser.add_option(config.threads,
                       '\0', "threads",
-                      "The number of threads to use. Currently, only merging of sketches is parallelized, so if option "
-                      "--rearrange-user-bins is not set, --threads will have no effect.",
+                      "The number of threads to use.",
                       seqan3::option_spec::standard,
                       seqan3::arithmetic_range_validator{static_cast<size_t>(1), static_cast<size_t>(32)});
 
@@ -83,9 +73,7 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::build::con
 
     parser.add_flag(config.output_verbose_statistics,
                     '\0', "output-verbose-statistics",
-                    "Enable verbose statistics to be "
-                    "printed to std::cout. If the flag --determine-best-tmax is not set, this flag is ignored "
-                    "and has no effect.",
+                    "Enable verbose statistics to be printed",
                     seqan3::option_spec::hidden);
 
     parser.add_flag(config.debug,
@@ -367,86 +355,6 @@ void build_hixf(taxor::build::configuration const config,
                                                                                 std::move(data.hixf)};
     
     store_index(args.out_path, index);
-}
-
-uint64_t construct_and_query_ixf(size_t bins, size_t elements_per_bin)
-{
-	
-	
-	//ulrich::interleaved_xor_filter<> ixf(elems);
-	seqan3::interleaved_xor_filter<> ixf(bins, elements_per_bin);
-	std::vector<size_t> elems{};
-	while (true)
-	{
-		bool success = true;
-		for (int e = 0; e < bins ; ++e)
-		{
-
-            //if (e % 7 == 0 || e % 15 == 0)
-            //    continue;
-
-			std::vector<size_t> tmp{};
-			for (size_t i = 0; i < elements_per_bin; ++i)
-			{
-				size_t key = (e*elements_per_bin) + i;
-				tmp.emplace_back(key);
-			}
-			success = ixf.add_bin_elements(e, tmp);
-			if (!success)
-			{
-				ixf.clear();
-				ixf.set_seed();
-				std::cout << e << std::endl;
-				break;
-			}
-			if (e == 2)
-				elems=std::move(tmp);
-		}
-		if (success)
-			break;
-	}
-	
-	//std::cout << "Built IXF in " << ixf_construct.elapsed() << " seconds" << std::endl;
-
-	std::cout << ixf.bin_count() << std::endl;
-	std::cout << (double) ixf.bit_size() / (double) ixf.bin_count() << std::endl;
-	
-	typedef seqan3::interleaved_xor_filter<>::counting_agent_type< uint64_t > TIXFAgent;
-
-	auto agent = ixf.membership_agent();
-    auto & result = agent.bulk_contains(elems[0]);
-    seqan3::debug_stream << elems[0]  << "\t" << result << '\n';
-	TIXFAgent ixf_count_agent = ixf.counting_agent< uint64_t >();
-	//auto result = count_agent.bulk_count(readHs);
-	auto ixf_result = ixf_count_agent.bulk_count(elems);
-	
-	seqan3::debug_stream << ixf_result << "\n";
-/*	double fpr {0.0};
-	for (int i =0; i < ixf_result.size(); ++i)
-	{
-		if (i == 2)
-		{
-			std::cout << ixf_result[i] << "/" << elems.size() << std::endl;
-			return ixf_result[i];
-			continue;
-		}
-		fpr += (double) ixf_result[i] / (double) elements_per_bin;
-	}
-	fpr /= (double) (bins - 1);
-	std::cout << "FPR of the IXF: " << fpr << std::endl;
-	double mbytes = (double) ixf.bit_size() / (double) 8388608;
-	std::cout << "Size of the IXF: " << mbytes << " MBytes" << std::endl;
-	std::cout << "Queried " << elems.size() <<" keys in IXF in " << ixf_query.elapsed() << " seconds" << std::endl;
-	StopClock ixf_store{};
-	ixf_store.start();
-	std::string filter_file = "test.ixf";
-	
-	std::ofstream               os( filter_file, std::ios::binary );
-    cereal::BinaryOutputArchive archive( os );
-    archive( ixf );  
-	ixf_store.stop();
-	std::cout << "Stored IXF in " << ixf_store.elapsed() << " seconds" << std::endl;
-    */
 }
 
 int execute(seqan3::argument_parser & parser)

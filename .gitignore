@@ -35,6 +35,8 @@
 .settings/
 .cproject
 .project
+.autotools
+.vscode/
 src/.settings/
 src/.cproject
 src/.project

@@ -29,14 +29,14 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::profile::c
                       seqan3::option_spec::required);
 
     parser.add_option(config.report_file, '\0', "cami-report-file", 
-                      "output file reporting genomic abundances in CAMI profiling format"
-                      "This is the relative genome abundance in terms of the genome copy number for the respective TAXID in the overall sample."
+                      "output file reporting genomic abundances in CAMI profiling format. "
+                      "This is the relative genome abundance in terms of the genome copy number for the respective TAXID in the overall sample. "
                       "Note that this is not identical to the relative abundance in terms of assigned base pairs.",
                       seqan3::option_spec::required);
 
     parser.add_option(config.sequence_abundance_file, '\0', "seq-abundance-file", 
-                      "output file reporting sequence abundance in CAMI profiling format (including unclassified reads)"
-                      "This is the relative sequence abundance in terms of sequenced base pairs for the respective TAXID in the overall sample."
+                      "output file reporting sequence abundance in CAMI profiling format (including unclassified reads). "
+                      "This is the relative sequence abundance in terms of sequenced base pairs for the respective TAXID in the overall sample. "
                       "Note that this is not identical to the genomic abundance in terms of genome copy number for the respective TAXID.");
 
     parser.add_option(config.binning_file, '\0', "binning-file", 
