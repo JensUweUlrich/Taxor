@@ -24,6 +24,92 @@ The easiest way is to simply download [executable binaries](https://github.com/s
 |[**profile**](#profile)                                                   | Generate the taxonomic profile from search results             |
 
 
+### <a name="build"></a>Taxor build
+
+```
+taxor-build - Creates and HIXF index of a given set of fasta files
+==================================================================
+
+DESCRIPTION
+    Creates an HIXF index using either k-mers or syncmers
+
+OPTIONS
+
+  Basic options:
+    -h, --help
+          Prints the help page.
+    -hh, --advanced-help
+          Prints the help page including advanced options.
+    --version
+          Prints the version information.
+    --copyright
+          Prints the copyright/license information.
+    --export-help (std::string)
+          Export the help page information. Value must be one of [html, man].
+
+  Main options:
+    --input-file (std::string)
+          tab-separated-value file containing taxonomy information and reference file names
+    --input-sequence-dir (std::string)
+          directory containing the fasta reference files Default: .
+    --output-filename (std::string)
+          A file name for the resulting index. Default: .
+    --kmer-size (signed 32 bit integer)
+          size of kmers used for index construction Default: 20. Value must be in range [1,30].
+    --syncmer-size (signed 32 bit integer)
+          size of syncmer used for index construction Default: 10. Value must be in range [1,26].
+    --threads (signed 32 bit integer)
+          The number of threads to use. Default: 1. Value must be in range [1,32].
+    --use-syncmer
+          enable using syncmers for smaller index size
+```
+
+<b> input-file</b><br>
+This file contains all relevant information about the organisms in the database, which will be indexed. All values are tab-separated and the file should have following columns:
+* Column 1: Assembly accession: the assembly accession.version reported in this field is 
+   a unique identifier for the set of sequences in this particular version of 
+   the genome assembly.
+* Column 2: Taxonomy ID: the NCBI taxonomy identifier for the organism from which the 
+   genome assembly was derived. The NCBI Taxonomy Database is a curated 
+   classification and nomenclature for all of the organisms in the public 
+   sequence databases. The taxonomy record can be retrieved from the NCBI 
+   Taxonomy resource:
+   https://www.ncbi.nlm.nih.gov/taxonomy/
+ * Column 3: FTP path: the path to the directory on the NCBI genomes FTP site from which 
+   data for this genome assembly can be downloaded
+ * Column 4: Organism name
+ * Column 5: Taxonomy string
+ * Column 6: Taxonomy ID string
+
+A two-line example of such a file is provided below. You can easily create such a file by following the preprocessing steps described in the [Usage](#usage) section.
+
+```
+GCF_000002495.2	318829	https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/002/495/GCF_000002495.2_MG8	Pyricularia oryzae	k__Eukaryota;p__Ascomycota;c__Sordariomycetes;o__Magnaporthales;f__Pyriculariaceae;g__Pyricularia;s__Pyricularia oryzae	2759;4890;147550;639021;2528436;48558;318829
+GCF_000002515.2	28985	https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/002/515/GCF_000002515.2_ASM251v1	Kluyveromyces lactis	k__Eukaryota;p__Ascomycota;c__Saccharomycetes;o__Saccharomycetales;f__Saccharomycetaceae;g__Kluyveromyces;s__Kluyveromyces lactis	2759;4890;4891;4892;4893;4910;28985
+```
+
+<b> input-sequence-dir</b><br>
+Path to the directory containing fasta files (compressed) of organisms listed in the tab-separated file explained above. The file stem of the fasta files needs to match the last directory path string of the FTP path in column 3 of the input file (e.g. GCF_000002495.2_MG8)
+
+<b> output-filename</b><br>
+Path to the output file containing the hierarchical interleaved XOR filter index of the reference sequences and taxonomy information for the profiling step.
+
+<b> kmer-size</b><br>
+Size of k-length-substrings used for pseudo-mapping. When using syncmers for downsampling, the kmer-size has to be even-numbered because of using open canonical syncmers. The maximum supported k-mer size is 30.
+
+<b> syncmer-size</b><br>
+Size of the substrings used for selecting a k-mer for pseudo-mapping. The syncmer-size also has to be even-numbered because of the usage of open canonical syncmers. This number needs to be smaller than the k-mer size and the maximum supported size is 26.
+
+<b> use-syncmer</b><br>
+Switch that enables the usage of syncmers for downsampling of k-mers.
+
+<b> threads</b><br>
+Number of threads used for computing the hierarchical structure and building the HIXF index.
+
+### <a name="search"></a>Taxor search
+
+
+
 ## <a name="usage"></a>Usage
 
 ![](img/Workflow.png)
