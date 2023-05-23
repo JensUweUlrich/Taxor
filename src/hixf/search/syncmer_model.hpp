@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <cassert>
 #include <cmath>
+#include <iostream>
 
 namespace hixf::threshold
 {
@@ -42,9 +43,9 @@ namespace hixf::threshold
         assert(error_rate >= 0);
         assert(error_rate <= 0.2);
 
-        size_t accuracy = static_cast<size_t>(floor((1 - error_rate) * 100));
-        size_t row_index = accuracy - 80;
-        size_t col_index = kmer_size - 10 - ((kmer_size-10)/2);
+        //size_t accuracy = static_cast<size_t>((1.0 - error_rate) * 100.0);
+        size_t row_index = ceil((1.0 - error_rate) * 100.0 - 80.0);//accuracy - 80;
+        size_t col_index = kmer_size - 10 - ((kmer_size-10)/2) - 1;
         return matching_ratios[row_index][col_index];
     }
 

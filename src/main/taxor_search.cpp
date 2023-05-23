@@ -33,10 +33,6 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::search::co
     // -----------------------------------------------------------------------------------------------------------------
     parser.add_option(config.index_file,
                       '\0', "index-file", "taxor index file containing HIXF index and reference sequence information",
- /*                     "Provide the prefix you used for the output prefix in the chopper count --output-prefix option. "
-                      "If you have different means of estimating the k-mer counts of your input data, make sure that a "
-                      "file [INPUT-PREFIX].count exists. It needs to be tab-separated and consist of two columns: "
-                      "\"[filepath] [tab] [weight/count]\".",*/
                       seqan3::option_spec::required);
 
     parser.add_option(config.query_file, '\0', "query-file", "file containing sequences to query against the index");
@@ -76,9 +72,6 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::search::co
 
 void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && index)
 {
-    //constexpr bool is_ibf = std::same_as<index_t, raptor_index<index_structure::ibf>>
-    //                     || std::same_as<index_t, raptor_index<index_structure::ibf_compressed>>;
-
     double index_io_time{0.0};
     double reads_io_time{0.0};
     double compute_time{0.0};
@@ -92,13 +85,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         arguments.shape_size = index.kmer_size();
         arguments.window_size = index.window_size();
         arguments.shape = seqan3::shape{seqan3::ungapped{arguments.shape_size}};
-        // TODO: thresholding should be set based on used pattern
-        //std::cout << arguments.threshold << std::endl << std::flush;
         hixf::threshold_parameters param = arguments.make_threshold_parameters();
-        //param.percentage = 0.05;
-        //if (arguments.compute_syncmer)
-            //param.fracminhash = true;
-        //param.seq_error_rate = 0.11111;
         thresholder = hixf::threshold::threshold{param};
         for (size_t i = 0; i < index.species().size(); ++i)
             user_bin_index.emplace(std::make_pair(index.species().at(i).user_bin, i));
@@ -112,24 +99,6 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
     hixf::sync_out synced_out{arguments.out_file};
 
     {
-        /*
-        size_t position{};
-        std::string line{};
-        for (auto const & file_list : arguments.bin_path)
-        {
-            line.clear();
-            line = '#';
-            line += std::to_string(position);
-            line += '\t';
-            for (auto const & filename : file_list)
-            {
-                line += filename;
-                line += ',';
-            }
-            line.back() = '\n';
-            synced_out << line;
-            ++position;
-        }*/
         synced_out << "#QUERY_NAME\tACCESSION\tREFERENCE_NAME\tTAXID\tREF_LEN\tQUERY_LEN\tQHASH_COUNT\tQHASH_MATCH\tQUERY_COV\n";
     }
 
@@ -156,9 +125,13 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
             result_string.clear();
             
             if (seq.size() < 1000)
+            {
+                result_string += id + '\t';
+                result_string += "-\t-\t-\t-\t";
+                result_string += std::to_string(seq.size()) + "\n";
+                synced_out.write(result_string);
                 continue;
-            //result_string += id;
-            //result_string += '\t';
+            }
 
             if (arguments.compute_syncmer)
             {
@@ -171,12 +144,9 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
                 auto minimiser_view = seq | hash_adaptor | std::views::common;
                 hashes.assign(minimiser_view.begin(), minimiser_view.end());
             }
-            //std::cout << id << "\t" << hashes.size() << std::endl << std::flush;
             size_t const hash_count{hashes.size()};
             size_t fp_correction = hash_count * 0.003;
             size_t threshold = thresholder.get(hash_count, (double)hash_count / ((double)seq.size() - (double)index.kmer_size() + 1.0));
-            //std::cout << "Threshold: " << threshold << std::endl;
-            //std::cout << "Minimizer count: " << hash_count << std::endl << std::flush;
 
             auto & result = counter.bulk_contains(hashes, threshold); // Results contains user bin IDs
             hashes.clear();
@@ -224,17 +194,10 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
             count_mutex.lock();
             reads++;
             count_mutex.unlock();
-            /*
-            if (auto & last_char = result_string.back(); last_char == ',')
-                last_char = '\n';
-            else
-                result_string += '\n';
-            */
             synced_out.write(result_string);
         }
     };
-
-    //std::cout << (1ULL << 20) << std::endl << std::flush;
+  
     for (auto && chunked_records : fin | seqan3::views::chunk(1024))
     {
         records.clear();
@@ -247,9 +210,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
 
         hixf::do_parallel(worker, records.size(), arguments.threads, compute_time);
     }
-    //std::cout << "mean ratio : " << mean_sum / static_cast<double>(reads) << std::endl;
 
-    // GCOVR_EXCL_START
     if (arguments.write_time)
     {
         std::filesystem::path file_path{arguments.out_file};
@@ -259,15 +220,15 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         file_handle << std::fixed << std::setprecision(2) << index_io_time << '\t' << reads_io_time << '\t'
                     << compute_time;
     }
-    // GCOVR_EXCL_STOP
+    
 }
 
 void search_hixf(taxor::search::configuration const config)
 {
     hixf::search_arguments search_args{};
-	search_args.index_file = config.index_file; //std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/raptor_kmer.hixf"};
-	search_args.query_file = config.query_file;//std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/files.renamed/GCF_000839085.1_genomic.fna.gz"};
-	search_args.out_file = config.report_file;//std::filesystem::path{"/media/jens/INTENSO/refseq-viral/2022-03-23_22-07-02/raptor.hixf_search.out"};
+	search_args.index_file = config.index_file; 
+	search_args.query_file = config.query_file;
+	search_args.out_file = config.report_file;
     search_args.threshold = config.threshold;
     search_args.threads = config.threads;
     search_args.seq_error_rate = config.error_rate;

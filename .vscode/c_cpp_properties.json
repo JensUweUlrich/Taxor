@@ -3,17 +3,17 @@
         {
             "name": "Linux",
             "includePath": [
-                "/media/jens/xavierSSD/software/PoreClassify/build/seqan/seqan3/seqan3-src/include/**",
-                "/media/jens/xavierSSD/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/sdsl-lite/include/**",
-                "/media/jens/xavierSSD/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/range-v3/include/**",
-                "/media/jens/xavierSSD/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/cereal/include/**",
-                "/media/jens/xavierSSD/software/PoreClassify/build/seqan/lemon/include/**",
-                "/media/jens/xavierSSD/software/PoreClassify/build/seqan/chopper/include/**",
-                "/media/jens/xavierSSD/software/PoreClassify/build/seqan/chopper/lib/simde/simde/**",
-                "/media/jens/xavierSSD/software/PoreClassify/build/hashing/ankerl/include/**",
-                "/media/jens/xavierSSD/software/PoreClassify/src/hixf/**",
-                "/media/jens/xavierSSD/software/PoreClassify/src/hashing/**",
-                "/media/jens/xavierSSD/software/PoreClassify/src/taxonomy/**"
+                "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/include/**",
+                "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/sdsl-lite/include/**",
+                "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/range-v3/include/**",
+                "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/cereal/include/**",
+                "/home/jens/software/PoreClassify/build/seqan/lemon/include/**",
+                "/home/jens/software/PoreClassify/build/seqan/chopper/include/**",
+                "/home/jens/software/PoreClassify/build/seqan/chopper/lib/simde/simde/**",
+                "/home/jens/software/PoreClassify/build/hashing/ankerl/include/**",
+                "/home/jens/software/PoreClassify/src/hixf/**",
+                "/home/jens/software/PoreClassify/src/hashing/**",
+                "/home/jens/software/PoreClassify/src/taxonomy/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++",
@@ -22,17 +22,17 @@
             "intelliSenseMode": "linux-gcc-x64",
             "browse": {
                 "path": [
-                    "/media/jens/xavierSSD/software/PoreClassify/build/seqan/seqan3/seqan3-src/include",
-                    "/media/jens/xavierSSD/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/sdsl-lite/include",
-                    "/media/jens/xavierSSD/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/range-v3/include",
-                    "/media/jens/xavierSSD/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/cereal/include",
-                    "/media/jens/xavierSSD/software/PoreClassify/build/seqan/lemon/include",
-                    "/media/jens/xavierSSD/software/PoreClassify/build/seqan/chopper/include",
-                    "/media/jens/xavierSSD/software/PoreClassify/build/seqan/chopper/lib/simde/simde",
-                    "/media/jens/xavierSSD/software/PoreClassify/build/hashing/ankerl/include",
-                    "/media/jens/xavierSSD/software/PoreClassify/src/hixf",
-                    "/media/jens/xavierSSD/software/PoreClassify/src/hashing",
-                    "/media/jens/xavierSSD/software/PoreClassify/src/taxonomy"
+                    "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/include",
+                    "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/sdsl-lite/include",
+                    "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/range-v3/include",
+                    "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/submodules/cereal/include",
+                    "/home/jens/software/PoreClassify/build/seqan/lemon/include",
+                    "/home/jens/software/PoreClassify/build/seqan/chopper/include",
+                    "/home/jens/software/PoreClassify/build/seqan/chopper/lib/simde/simde",
+                    "/home/jens/software/PoreClassify/build/hashing/ankerl/include",
+                    "/home/jens/software/PoreClassify/src/hixf",
+                    "/home/jens/software/PoreClassify/src/hashing",
+                    "/home/jens/software/PoreClassify/src/taxonomy"
                 ]
             },
             "mergeConfigurations": false,
@@ -41,7 +41,7 @@
         {
             "name": "PoreClassify",
             "includePath": [
-                "/media/jens/xavierSSD/software/PoreClassify/build/seqan/seqan3/seqan3-src/include/**"
+                "/home/jens/software/PoreClassify/build/seqan/seqan3/seqan3-src/include/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++",

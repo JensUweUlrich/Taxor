@@ -26,10 +26,6 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::profile::c
     // -----------------------------------------------------------------------------------------------------------------
     parser.add_option(config.search_file,
                       '\0', "search-file", "taxor search file containing results of read querying against the HIXF index",
- /*                     "Provide the prefix you used for the output prefix in the chopper count --output-prefix option. "
-                      "If you have different means of estimating the k-mer counts of your input data, make sure that a "
-                      "file [INPUT-PREFIX].count exists. It needs to be tab-separated and consist of two columns: "
-                      "\"[filepath] [tab] [weight/count]\".",*/
                       seqan3::option_spec::required);
 
     parser.add_option(config.report_file, '\0', "cami-report-file", 
@@ -226,20 +222,7 @@ void remove_low_confidence_references(std::map<std::string, std::vector<taxonomy
 {
     ankerl::unordered_dense::set<std::string> accepted_refs{};
     for (auto & ref : map_counts)
-    {
-        /*if (ref.first.compare("2866282") == 0)
-            std::cout << "PS1: " << ref.second.first << "\t" << ref.second.second << "\t" <<
-            static_cast<float>(ref.second.first) / static_cast<float>(ref.second.first + ref.second.second) << "\t" <<
-            static_cast<float>(ref.second.first + ref.second.second) / static_cast<float>(search_results.size()) << std::endl;
-        if (ref.first.compare("208964") == 0)
-            std::cout << "aeruginosa: " << ref.second.first << "\t" << ref.second.second << "\t" <<
-            static_cast<float>(ref.second.first) / static_cast<float>(ref.second.first + ref.second.second) << "\t" <<
-            static_cast<float>(ref.second.first + ref.second.second) / static_cast<float>(search_results.size()) << std::endl;
-        if (ref.first.compare("2545800") == 0)
-            std::cout << "FDARGOS: " << ref.second.first << "\t" << ref.second.second << "\t" <<
-            static_cast<float>(ref.second.first) / static_cast<float>(ref.second.first + ref.second.second) << "\t" <<
-            static_cast<float>(ref.second.first + ref.second.second) / static_cast<float>(search_results.size()) << std::endl;
-        */
+    {   
         if (ref.second.first >= min_unique_mappings &&
                 static_cast<float>(ref.second.first) / static_cast<float>(ref.second.first + ref.second.second) >= min_fraction_unique)
             accepted_refs.insert(ref.first);
@@ -693,9 +676,9 @@ void tax_profile(taxor::profile::configuration& config)
     remove_matches_to_nonunique_refs(search_results, ref_unique_mappings);
 
     // 2nd round of reference filtering
-    //std::map<std::string,std::pair<uint64_t,uint64_t>> map_counts = count_unique_ambiguous_mappings_per_reference(search_results);
+    std::map<std::string,std::pair<uint64_t,uint64_t>> map_counts = count_unique_ambiguous_mappings_per_reference(search_results);
     // at least 3 uniquely mapped reads & at least 10% of all mappings unique
-    //remove_low_confidence_references(search_results, map_counts, 3, 0.001);
+    remove_low_confidence_references(search_results, map_counts, 3, 0.001);
    
     std::map<std::string, size_t> found_taxa = filter_ref_associations(search_results);
    
