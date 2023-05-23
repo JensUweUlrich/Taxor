@@ -108,7 +108,79 @@ Number of threads used for computing the hierarchical structure and building the
 
 ### <a name="search"></a>Taxor search
 
+```
+taxor-search - Queries a file of DNA sequences against an HIXF index
+====================================================================
 
+DESCRIPTION
+    Query sequences against the taxor HIXF index structure
+
+OPTIONS
+
+  Basic options:
+    -h, --help
+          Prints the help page.
+    -hh, --advanced-help
+          Prints the help page including advanced options.
+    --version
+          Prints the version information.
+    --copyright
+          Prints the copyright/license information.
+    --export-help (std::string)
+          Export the help page information. Value must be one of [html, man].
+
+  Main options:
+    --index-file (std::string)
+          taxor index file containing HIXF index and reference sequence information
+    --query-file (std::string)
+          file containing sequences to query against the index Default: .
+    --output-file (std::string)
+          A file name for the resulting output. Default: .
+    --threads (unsigned 8 bit integer)
+          The number of threads to use. Default: 1. Value must be in range [1,32].
+    --percentage (double)
+          If set, this threshold is used instead of the k-mer/syncmer models. Default: -1. Value must be in range
+          [0,1].
+    --error-rate (double)
+          Expected error rate of reads that will be queried Default: 0.04. Value must be in range [0,1].
+
+```
+
+<b> index-file</b><br>
+Path to the file containing the hierarchical interleaved XOR filter index of the reference sequences and taxonomy information for the profiling step.
+
+<b> query-file</b><br>
+Path to a fast(a/q) file containing sequenced reads of a sample, which shall be taxonomically classified. This file can be gzip compressed.
+
+<b> output-file</b><br>
+Path to the output file containing results of the classification step. This file is tab-separated with 10 columns per line.
+* Column 1  : read identifier
+* Column 2  : Assembly Accession ID of the matching reference
+* Column 3  : Organism name of the matching reference
+* Column 4  : Taxonomy ID of the matching reference
+* Column 5  : Cumulative length of the matching reference sequence
+* Column 6  : Sequence length of the queried read
+* Column 7  : Overall number of k-mers (syncmers) generated from the queried read
+* Column 8  : Number of k-mers (syncmers) of the query read that match with the reference sequence
+* Column 9  : Taxonomy string of the matched reference
+* Column 10 : Taxonomy ID string of the matched reference
+
+```
+#QUERY_NAME	ACCESSION	REFERENCE_NAME	TAXID	REF_LEN	QUERY_LEN	QHASH_COUNT	QHASH_MATCH TAX_STR TAX_ID_STR
+f3a88e6f-9873-445a-b0c7-2406f3a360fc|1613       GCF_022819245.1 Limosilactobacillus fermentum   1613    2016236 1139    98      56      k__Bacteria;p__Bacillota;c__Bacilli;o__Lactobacillales;f__Lactobacillaceae;g__Limosilactobacillus;s__Limosilactobacillus fermentum      2;1239;91061;186826;33958;2742598;1613
+9d3a345f-3bf7-4304-977c-ee8b2b3c2b17|96241      GCF_000959025.1 Bacillus intestinalis   1963032 4031727 2589    224     104     k__Bacteria;p__Bacillota;c__Bacilli;o__Bacillales;f__Bacillaceae;g__Bacillus;s__Bacillus intestinalis   2;1239;91061;1385;186817;1386;1963032
+9d3a345f-3bf7-4304-977c-ee8b2b3c2b17|96241      GCF_006094475.1 Bacillus spizizenii     96241   4045538 2589    224     104     k__Bacteria;p__Bacillota;c__Bacilli;o__Bacillales;f__Bacillaceae;g__Bacillus;s__Bacillus spizizenii     2;1239;91061;1385;186817;1386;96241
+4e845c81-7397-4956-bdb2-5893b450aa3e|1613       GCF_022819245.1 Limosilactobacillus fermentum   1613    2016236 1790    158     38      k__Bacteria;p__Bacillota;c__Bacilli;o__Lactobacillales;f__Lactobacillaceae;g__Limosilactobacillus;s__Limosilactobacillus fermentum      2;1239;91061;186826;33958;2742598;1613
+acc4abca-4daf-4af1-a3fc-edc189c37095|2807625    GCF_018622975.1 Staphylococcus sp. MZ9  2836367 2860948 3971    344     158     k__Bacteria;p__Bacillota;c__Bacilli;o__Bacillales;f__Staphylococcaceae;g__Staphylococcus;s__Staphylococcus sp. MZ9      2;1239;91061;1385;90964;1279;2836367
+```
+<b> threads</b><br>
+Number of threads used for querying the sequences in the input file against the HIXF index.
+
+<b> percentage</b><br>
+Can be used to define the minimum percentage of k-mers/syncmers that need to match a reference. By default we use the k-mer model from [Blanca et al.](https://www.liebertpub.com/doi/abs/10.1089/cmb.2021.0431?journalCode=cmb) or empircally computed values for determining the thesholds for reporting a match. 
+
+<b> error-rate</b><br>
+For more accurate classification of reads we are calculating the expected number of mutated k-mers for each read prefix based on the expected sequencing ```error rate```. Than a confidence interval for the mutated k-mers is calculated as described by [Blanca et al.](https://www.liebertpub.com/doi/abs/10.1089/cmb.2021.0431?journalCode=cmb) and the minimum number of matching k-mers is calculated based on the upper bound of the confidence interval. The significance level of the confidence interval is set to 95% by default. When using synmcers, we are using emprically calculated minimum numbers of matching syncmers for a given error rate and k-mer length.
 
 ## <a name="usage"></a>Usage
 
@@ -144,7 +216,7 @@ cut -f 1,7,20 assembly_summary.txt \
 ```
 Now we can build the hierarchical interleaved XOR filter (HIXF) index of the reference sequences and the NCBI taxonomy.
 ```
-taxor build --input-file refseq_accessions_taxonomy.csv --input-sequence_dir refseq/2023-03-15_12-56-12/files \
+taxor build --input-file refseq_accessions_taxonomy.csv --input-sequence-dir refseq/2023-03-15_12-56-12/files \
 --output-filename refseq-abfv-k22-s12.hixf --threads 6 --kmer-size 22 --syncmer-size 12 --use-syncmer
 ```
 Then, we query the sample fastq file against the index allowing in this case a sequencing error rate of 15%. 
