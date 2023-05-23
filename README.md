@@ -180,7 +180,68 @@ Number of threads used for querying the sequences in the input file against the 
 Can be used to define the minimum percentage of k-mers/syncmers that need to match a reference. By default we use the k-mer model from [Blanca et al.](https://www.liebertpub.com/doi/abs/10.1089/cmb.2021.0431?journalCode=cmb) or empircally computed values for determining the thesholds for reporting a match. 
 
 <b> error-rate</b><br>
-For more accurate classification of reads we are calculating the expected number of mutated k-mers for each read prefix based on the expected sequencing ```error rate```. Than a confidence interval for the mutated k-mers is calculated as described by [Blanca et al.](https://www.liebertpub.com/doi/abs/10.1089/cmb.2021.0431?journalCode=cmb) and the minimum number of matching k-mers is calculated based on the upper bound of the confidence interval. The significance level of the confidence interval is set to 95% by default. When using synmcers, we are using emprically calculated minimum numbers of matching syncmers for a given error rate and k-mer length.
+For more accurate classification of reads we are calculating the expected number of mutated k-mers for each read prefix based on the expected sequencing error rate. Than a confidence interval for the mutated k-mers is calculated as described by [Blanca et al.](https://www.liebertpub.com/doi/abs/10.1089/cmb.2021.0431?journalCode=cmb) and the minimum number of matching k-mers is calculated based on the upper bound of the confidence interval. The significance level of the confidence interval is set to 95% by default. When using synmcers, we are using emprically calculated minimum numbers of matching syncmers for a given error rate and k-mer length.
+
+### <a name="profile"></a>Taxor profile
+
+```
+taxor-profile - Taxonomic profiling of a sample by giving read matching results of Taxor search
+===============================================================================================
+
+DESCRIPTION
+    Taxonomic profiling of the given read set
+
+OPTIONS
+
+  Basic options:
+    -h, --help
+          Prints the help page.
+    -hh, --advanced-help
+          Prints the help page including advanced options.
+    --version
+          Prints the version information.
+    --copyright
+          Prints the copyright/license information.
+    --export-help (std::string)
+          Export the help page information. Value must be one of [html, man].
+
+  Main options:
+    --search-file (std::string)
+          taxor search file containing results of read querying against the HIXF index
+    --cami-report-file (std::string)
+          output file reporting genomic abundances in CAMI profiling format. This is the relative genome abundance in
+          terms of the genome copy number for the respective TAXID in the overall sample. Note that this is not
+          identical to the relative abundance in terms of assigned base pairs.
+    --seq-abundance-file (std::string)
+          output file reporting sequence abundance in CAMI profiling format (including unclassified reads). This is
+          the relative sequence abundance in terms of sequenced base pairs for the respective TAXID in the overall
+          sample. Note that this is not identical to the genomic abundance in terms of genome copy number for the
+          respective TAXID. Default: .
+    --binning-file (std::string)
+          output file reporting read to taxa assignments in CAMI binning format
+    --sample-id (std::string)
+          Identifier of the analyzed sample
+    --threads (unsigned 8 bit integer)
+          The number of threads to use. Default: 1. Value must be in range [1,32].
+```
+
+<b> search-file</b><br>
+Path to the output file of the [search](#search) step containing results of the classification. This file is tab-separated with 10 columns per line as described above.
+
+<b> cami-report-file</b><br>
+Output file reporting genomic abundances in CAMI profiling format. This is the relative genome abundance or taxonomic abundance in terms of the genome copy number for the respective TAXID in the overall sample. 
+
+<b> seq-abundance-file</b><br>
+Output file reporting sequence abundance in CAMI profiling format (including unclassified reads). This is the relative sequence abundance in terms of sequenced base pairs for the respective TAXID in the overall sample.
+
+<b> binning-file</b><br>
+Output file reporting read to taxon assignments in CAMI binning format.
+
+<b> sample-id</b><br>
+String that identifies the analyzed sample.
+
+<b> threads</b><br>
+Number of threads used for taxonomic profiling.
 
 ## <a name="usage"></a>Usage
 
