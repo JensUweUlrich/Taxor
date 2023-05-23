@@ -13,7 +13,17 @@
 
 ## <a name="description"></a>Description
 
-Taxor is a taxonomic classification and profiling tool that efficiently classifies DNA sequences against large sets of genomic reference sequences. 
+Taxor is a taxonomic classification and profiling tool that efficiently classifies DNA sequences against large sets of genomic reference sequences. Taxor stores k-mers in an optimized hierarchical interleaved XOR filter (HIXF) index and combines k-mer similarity and genome coverage information for precise taxonomic classification and profiling. It features:
+
+* Low false positive rates for k-mer matching 
+* NCBI taxonomy integration
+* Open canonical syncmers as k-mer selection scheme for improved downsampling
+* classification with binning and taxonomic profiling
+* read reassignment EM algorithm for multi-matching reads
+* advanced filtration of search results
+* taxonomic and sequence abundance reports with genome size correction
+
+Benchmarking results based on simulated and real long-read data sets demonstrate that Taxor enables more precise taxonomic classification and profiling of microbial populations while having a smaller memory footprint than other tools.
 
 ## <a name="installation"></a>Installation
 
