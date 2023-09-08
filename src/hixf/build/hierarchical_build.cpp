@@ -1,3 +1,10 @@
+/ --------------------------------------------------------------------------------------------------
+// Copyright (c) 2006-2023, Knut Reinert & Freie Universität Berlin
+// Copyright (c) 2016-2023, Knut Reinert & MPI für molekulare Genetik
+// This file may be used, modified and/or redistributed under the terms of the 3-clause BSD-License
+// shipped with this file and also available at: https://github.com/JensUweUlrich/Taxor/blob/main/LICENSE.md
+// --------------------------------------------------------------------------------------------------
+
 
 #include <lemon/list_graph.h> /// Must be first include.
 
@@ -228,17 +235,4 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
     return ixf_pos;
 }
 
-/*
-template size_t hierarchical_build<seqan3::data_layout::uncompressed>(robin_hood::unordered_flat_set<size_t> &,
-                                                                      lemon::ListDigraph::Node const &,
-                                                                      build_data<seqan3::data_layout::uncompressed> &,
-                                                                      build_arguments const &,
-                                                                      bool);
-
-template size_t hierarchical_build<seqan3::data_layout::compressed>(robin_hood::unordered_flat_set<size_t> &,
-                                                                    lemon::ListDigraph::Node const &,
-                                                                    build_data<seqan3::data_layout::compressed> &,
-                                                                    build_arguments const &,
-                                                                    bool);
-*/
 }

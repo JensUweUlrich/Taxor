@@ -1,3 +1,10 @@
+/ --------------------------------------------------------------------------------------------------
+// Copyright (c) 2006-2023, Knut Reinert & Freie Universität Berlin
+// Copyright (c) 2016-2023, Knut Reinert & MPI für molekulare Genetik
+// This file may be used, modified and/or redistributed under the terms of the 3-clause BSD-License
+// shipped with this file and also available at: https://github.com/JensUweUlrich/Taxor/blob/main/LICENSE.md
+// --------------------------------------------------------------------------------------------------
+
 #pragma once
 
 #include <atomic>
@@ -9,7 +16,7 @@
 namespace hixf
 {
 
-//template <seqan3::data_layout data_layout_mode>
+
 struct build_data
 {
     alignas(std::hardware_destructive_interference_size) std::atomic<size_t> ixf_number{};

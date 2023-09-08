@@ -1,3 +1,17 @@
+// --------------------------------------------------------------------------------------------------
+// Copyright (c) 2006-2023, Knut Reinert & Freie Universität Berlin
+// Copyright (c) 2016-2023, Knut Reinert & MPI für molekulare Genetik
+// This file may be used, modified and/or redistributed under the terms of the 3-clause BSD-License
+// shipped with this file and also available at: https://github.com/JensUweUlrich/Taxor/blob/main/LICENSE.md
+// --------------------------------------------------------------------------------------------------
+
+/*!\file
+ * \brief Provides hixf::adjust_seed.
+ * \author Enrico Seiler <enrico.seiler AT fu-berlin.de>
+ * \adjusted by Jens-Uwe Ulrich <jens-uwe.ulrich AT hpi.de>
+ */
+
+
 #pragma once
 
 #include <cstdint>
@@ -5,12 +19,12 @@
 namespace hixf
 {
 
-/*\brief Adjust the default seed such that it does not interfere with the IBF's hashing.
+/*\brief Adjust the default seed such that it does not interfere with the IXF's hashing.
  *\param kmer_size The used k-mer size. For gapped shapes, this corresponds to the number of set bits (count()).
  *\param seed The seed.
  *\details
  *
- * The hashing used with the IBF assumes that the input values are uniformly distributed.
+ * The hashing used with the IXF assumes that the input values are uniformly distributed.
  * However, we use a 64 bit seed, and unless the `kmer_size` is 32, not all 64 bits of the k-mers change.
  * Hence, we need to shift the seed to the right.
  *
@@ -29,4 +43,4 @@ static inline constexpr uint64_t adjust_seed(uint8_t const kmer_size,
     return seed >> (64u - 2u * kmer_size);
 }
 
-} // namespace raptor
+} 
