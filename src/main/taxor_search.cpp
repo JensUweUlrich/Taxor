@@ -99,7 +99,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
     hixf::sync_out synced_out{arguments.out_file};
 
     {
-        synced_out << "#QUERY_NAME\tACCESSION\tREFERENCE_NAME\tTAXID\tREF_LEN\tQUERY_LEN\tQHASH_COUNT\tQHASH_MATCH\tQUERY_COV\n";
+        synced_out << "#QUERY_NAME\tACCESSION\tREFERENCE_NAME\tTAXID\tREF_LEN\tQUERY_LEN\tQHASH_COUNT\tQHASH_MATCH\tTAX_STR\tTAX_ID_STR\n";
     }
 
     
