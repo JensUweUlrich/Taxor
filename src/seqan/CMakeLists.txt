@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.16)
+
 message(STATUS "${CMAKE_GENERATOR}")
 
 #if (WIN32)
@@ -42,13 +44,29 @@ if (WIN32)
     set(ZLIB_LIBRARIES zlib)
 else()
     set_target_properties(zlib PROPERTIES IMPORTED_LOCATION "${ZLIB_ROOT}/lib/libz.a")
-    set(ZLIB_LIBRARIES zlib)
+    set(ZLIB_LIBRARIES "${ZLIB_ROOT}/lib/libz.a")
+    set(ZLIB_FOUND True)
+    #message(FATAL_ERROR ${ZLIB_LIBRARIES})
 endif()
 
 set(ZLIB_INCLUDE_DIRS "${ZLIB_ROOT}/include")
 
+set(BZIP2_ROOT "${CMAKE_CURRENT_BINARY_DIR}/bzip2")
+add_library(bzip2 STATIC IMPORTED GLOBAL)
+if (WIN32)
+    set_target_properties(bzip2 PROPERTIES IMPORTED_LOCATION "${BZIP2_ROOT}/lib/bzip2static.lib")
+    set(BZIP2_LIBRARIES bzip2)
+else()
+    set_target_properties(bzip2 PROPERTIES IMPORTED_LOCATION "${BZIP2_ROOT}/lib/libbz2_static.a")
+    set(BZIP2_LIBRARIES bzip2)
+endif()
 
-find_package(ZLIB REQUIRED)
+set(BZIP2_INCLUDE_DIR "${BZIP2_ROOT}/include")
+
+#find_library(zlib)
+
+#find_package(ZLIB REQUIRED)
+#find_package(BZip2 REQUIRED)
 
 set( SEQAN3_INCLUDE_PATH ${CMAKE_CURRENT_BINARY_DIR}/seqan3/seqan3-src/include )
 find_package (SeqAn3 3.1.0 REQUIRED HINTS ${CMAKE_CURRENT_BINARY_DIR}/seqan3/seqan3-src/build_system)
@@ -56,6 +74,7 @@ find_package (SeqAn3 3.1.0 REQUIRED HINTS ${CMAKE_CURRENT_BINARY_DIR}/seqan3/seq
 add_library( seqan3 INTERFACE )
 target_include_directories( seqan3 SYSTEM INTERFACE ${SEQAN3_INCLUDE_DIRS} )
 target_link_libraries( seqan3 INTERFACE ${SEQAN3_LIBRARIES} )
+#message(FATAL_ERROR ${SEQAN3_LIBRARIES})
 
 add_compile_options( ${SEQAN3_DEFINITIONS} )
 set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SEQAN3_CXX_FLAGS}" )

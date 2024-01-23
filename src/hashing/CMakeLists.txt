@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.16)
+
 file(GLOB HASH_SRC "*.cpp" "*.c")
 file(GLOB HASH_HDRS "*.hpp" "*.h")
 

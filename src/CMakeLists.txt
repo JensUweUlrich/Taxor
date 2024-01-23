@@ -8,7 +8,7 @@ project (taxor CXX C)
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_STANDARD 20)
 
-
+option(BUILD_SHARED_LIBS "Build using shared libraries" OFF)
 
 if (WIN32)
     if (MSVC)
@@ -26,6 +26,7 @@ if (WIN32)
     set(CMAKE_INSTALL_PREFIX "C:/Apps/${PROJECT_NAME}")
     
 else()
+    set(CMAKE_CXX_STANDARD_LIBRARIES "-static-libgcc -static-libstdc++" ${CMAKE_CXX_STANDARD_LIBRARIES})
     check_cxx_compiler_flag ("-fopenmp" HAS_OPENMP)
     if (HAS_OPENMP)
         set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
@@ -45,8 +46,13 @@ else()
         add_compile_options("-std=c++2a")
     endif()
     add_compile_options("-Ofast")
+    add_compile_options("-static-libstdc++")
+    add_compile_options("-static-libgcc")
+    #set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Bstatic")
 #    add_link_options("stdc++fs")
     
+ #   /usr/aarch64-linux-gnu/lib/libm.a
+
 endif()
 
 # add all subdirectories

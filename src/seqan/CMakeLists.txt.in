@@ -1,3 +1,4 @@
+cmake_minimum_required(VERSION 3.16)
 
 project(seqan2-download NONE)
 include(ExternalProject)
@@ -28,6 +29,17 @@ ExternalProject_Add(zlib
   SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/zlib"
   CMAKE_CACHE_ARGS
         -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/zlib
+        -DENABLE_STATIC_LIB:BOOL=ON
+)
+
+ExternalProject_Add(bzip2
+  PREFIX bzip2
+  GIT_REPOSITORY    https://github.com/libarchive/bzip2.git
+  GIT_TAG           master
+  SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/bzip2"
+  CMAKE_CACHE_ARGS
+        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_CURRENT_BINARY_DIR}/bzip2
+        -DENABLE_STATIC_LIB:BOOL=ON
 )
 
 ExternalProject_Add(lemon
@@ -49,12 +61,14 @@ ExternalProject_Add(seqan3
   CMAKE_ARGS		    "-DCMAKE_PREFIX_PATH=<SOURCE_DIR>/build_system" 
                     "-DSEQAN3_INCLUDE_PATH=${CMAKE_CURRENT_BINARY_DIR}/seqan3/seqan3-src/include"
                     "-DSEQAN3_NO_ZLIB=0"
+                    "-DSEQAN3_NO_BZIP2=0"
   CMAKE_CACHE_ARGS
         -DSEQAN3_NO_ZLIB=0
+        -DSEQAN3_NO_BZIP2=0
   CONFIGURE_COMMAND	""
   BUILD_COMMAND		""
   INSTALL_COMMAND	""
-  DEPENDS zlib
+  DEPENDS zlib bzip2
 )
 
 ExternalProject_Add(chopper
