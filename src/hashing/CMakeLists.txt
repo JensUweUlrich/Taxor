@@ -20,7 +20,7 @@ execute_process(COMMAND ${CMAKE_COMMAND} --build . --config Release
 
 add_library (hashing STATIC ${HASH_SRC} ${HASH_HDRS})
 
-set(unordered_dense_DIR "${CMAKE_CURRENT_BINARY_DIR}/ankerl/lib/cmake/unordered_dense")
+set(unordered_dense_DIR "${CMAKE_CURRENT_BINARY_DIR}/ankerl/lib${LIBDIRSUFFIX}/cmake/unordered_dense")
 find_package(unordered_dense CONFIG REQUIRED)
 
 
