@@ -37,39 +37,26 @@ execute_process(COMMAND ${CMAKE_COMMAND} --build . --config Release
 #target_include_directories( sdsl SYSTEM INTERFACE ${CMAKE_CURRENT_BINARY_DIR}/sdsl-lite/include )
 
 
-set(ZLIB_ROOT "${CMAKE_CURRENT_BINARY_DIR}/zlib")
-add_library(zlib STATIC IMPORTED GLOBAL)
-if (WIN32)
-    set_target_properties(zlib PROPERTIES IMPORTED_LOCATION "${ZLIB_ROOT}/lib/zlibstatic.lib")
-    set(ZLIB_LIBRARIES zlib)
-else()
-    set_target_properties(zlib PROPERTIES IMPORTED_LOCATION "${ZLIB_ROOT}/lib/libz.a")
-    set(ZLIB_LIBRARIES "${ZLIB_ROOT}/lib/libz.a")
-    set(ZLIB_FOUND True)
-    #message(FATAL_ERROR ${ZLIB_LIBRARIES})
-endif()
+#set(ZLIB_ROOT "${CMAKE_CURRENT_BINARY_DIR}/zlib")
+#add_library(zlib STATIC IMPORTED GLOBAL)
+#set_target_properties(zlib PROPERTIES IMPORTED_LOCATION "${ZLIB_ROOT}/lib/libz.a")
+#set(ZLIB_LIBRARIES "${ZLIB_ROOT}/lib/libz.a")
+#set(ZLIB_FOUND True)
+#set(ZLIB_INCLUDE_DIRS "${ZLIB_ROOT}/include")
 
-set(ZLIB_INCLUDE_DIRS "${ZLIB_ROOT}/include")
-
-set(BZIP2_ROOT "${CMAKE_CURRENT_BINARY_DIR}/bzip2")
-add_library(bzip2 STATIC IMPORTED GLOBAL)
-if (WIN32)
-    set_target_properties(bzip2 PROPERTIES IMPORTED_LOCATION "${BZIP2_ROOT}/lib/bzip2static.lib")
-    set(BZIP2_LIBRARIES bzip2)
-else()
-    set_target_properties(bzip2 PROPERTIES IMPORTED_LOCATION "${BZIP2_ROOT}/lib/libbz2_static.a")
-    set(BZIP2_LIBRARIES bzip2)
-endif()
-
-set(BZIP2_INCLUDE_DIR "${BZIP2_ROOT}/include")
+#set(BZIP2_ROOT "${CMAKE_CURRENT_BINARY_DIR}/bzip2")
+#add_library(bzip2 STATIC IMPORTED GLOBAL)
+#set_target_properties(bzip2 PROPERTIES IMPORTED_LOCATION "${BZIP2_ROOT}/lib/libbz2_static.a")
+#set(BZIP2_LIBRARIES bzip2)
+#set(BZIP2_INCLUDE_DIR "${BZIP2_ROOT}/include")
 
 #find_library(zlib)
 
-#find_package(ZLIB REQUIRED)
-#find_package(BZip2 REQUIRED)
+find_package(ZLIB REQUIRED)
+find_package(BZip2 REQUIRED)
 
 set( SEQAN3_INCLUDE_PATH ${CMAKE_CURRENT_BINARY_DIR}/seqan3/seqan3-src/include )
-find_package (SeqAn3 3.1.0 REQUIRED HINTS ${CMAKE_CURRENT_BINARY_DIR}/seqan3/seqan3-src/build_system)
+find_package (SeqAn3 3.3.0 REQUIRED HINTS ${CMAKE_CURRENT_BINARY_DIR}/seqan3/seqan3-src/build_system)
 
 add_library( seqan3 INTERFACE )
 target_include_directories( seqan3 SYSTEM INTERFACE ${SEQAN3_INCLUDE_DIRS} )
