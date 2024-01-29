@@ -2,6 +2,7 @@
 #pragma once
 
 //#include "robin_hood.h"
+#define __STDC_FORMAT_MACROS
 #include <ankerl/unordered_dense.h>
 #include <seqan3/search/dream_index/interleaved_xor_filter.hpp>
 
