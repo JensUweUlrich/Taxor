@@ -2,6 +2,8 @@
 #ifndef index_hpp
 #define index_hpp
 
+#define __STDC_FORMAT_MACROS
+
 #include <stdio.h>
 #include <string>
 #include <vector>

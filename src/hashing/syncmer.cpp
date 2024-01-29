@@ -25,7 +25,7 @@
 #include <math.h>       /* pow */
 #include <bitset>
 #include <climits>
-#include <inttypes.h>
+//#include <inttypes.h>
 
 
 /**********************************************************
