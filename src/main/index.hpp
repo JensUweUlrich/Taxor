@@ -40,6 +40,7 @@ private:
     uint8_t syncmer_size_{};
     uint8_t t_syncmer_{};
     uint8_t kmer_size_{};
+    uint16_t scaling_{};
 
 
 public:
@@ -60,6 +61,7 @@ public:
                          uint8_t t_syncmer,
                          uint8_t const parts,
                          bool const use_syncmer,
+                         uint16_t scaling,
                          bool const compressed,
                          std::vector<std::vector<std::string>> const & bin_path,
                          std::vector<taxonomy::Species> &species,
@@ -71,6 +73,7 @@ public:
         t_syncmer_{t_syncmer},
         parts_{parts},
         use_syncmer_{use_syncmer},
+        scaling_{scaling},
         compressed_{compressed},
         bin_path_{bin_path},
         species_{species},
@@ -85,6 +88,7 @@ public:
         t_syncmer_{arguments.t_syncmer},
         parts_{arguments.parts},
         use_syncmer_{arguments.compute_syncmer},
+        scaling_{arguments.scaling},
         compressed_{arguments.compressed},
         bin_path_{arguments.bin_path},
         species_{},
@@ -104,6 +108,7 @@ public:
         t_syncmer_ = other.t_syncmer_;
         parts_ = other.parts_;
         use_syncmer_ = other.use_syncmer_;
+        scaling_ = other.scaling_;
         compressed_ = true;
         bin_path_ = other.bin_path_;
         species_ = other.species_;
@@ -121,6 +126,7 @@ public:
         t_syncmer_ = std::move(other.t_syncmer_);
         parts_ = std::move(other.parts_);
         use_syncmer_ = std::move(other.use_syncmer_);
+        scaling_ = std::move(other.scaling_);
         compressed_ = true;
         bin_path_ = std::move(other.bin_path_);
         species_ = std::move(other.species_);
@@ -160,6 +166,11 @@ public:
     bool use_syncmer() const
     {
         return use_syncmer_;
+    }
+
+    uint16_t scaling() const
+    {
+        return scaling_;
     }
 
     bool compressed() const
@@ -210,6 +221,7 @@ public:
                 archive(t_syncmer_);
                 archive(parts_);
                 archive(use_syncmer_);
+                archive(scaling_);
                 archive(compressed_);
                 /*if ((data_layout_mode == seqan3::data_layout::compressed && !compressed_)
                     || (data_layout_mode == seqan3::data_layout::uncompressed && compressed_))
@@ -254,6 +266,7 @@ public:
                 archive(t_syncmer_);
                 archive(parts_);
                 archive(use_syncmer_);
+                archive(scaling_);
                 archive(compressed_);
                 archive(bin_path_);
                 archive(species_);

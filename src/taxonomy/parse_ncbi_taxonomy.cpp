@@ -10,15 +10,24 @@ namespace taxor::taxonomy
 	    read_tsv(filepath, tax_file_lines);
 	    uint64_t species_counter = 0;
 		std::vector<Species> org_list{};
-
+		uint16_t count{0};
 		for (std::vector<std::string> line : tax_file_lines)
 		{
+			
 			Species sp{};
 			sp.accession_id = line[0];
 			sp.taxid = line[1];
-			sp.organism_name = line[3];
-			sp.taxnames_string = line[4];
-			sp.taxid_string = line[5];
+
+			sp.organism_name = "";
+			sp.taxnames_string = "";
+			sp.taxid_string = "";
+
+			if (line.size() > 3)
+				sp.organism_name = line[3];
+			if (line.size() > 4)
+				sp.taxnames_string = line[4];
+			if (line.size() > 5)
+				sp.taxid_string = line[5];
 			
 			std::size_t found = line[2].find_last_of("/\\");
 			if (found != std::string::npos)
@@ -26,7 +35,6 @@ namespace taxor::taxonomy
 			
 			org_list.emplace_back(std::move(sp));
 	 	}
-		
 		return std::move(org_list);
     }
     

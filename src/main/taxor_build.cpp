@@ -27,8 +27,10 @@
 #include <build/strong_types.hpp>
 #include <build/build_arguments.hpp>
 #include <build/dna4_traits.hpp>
+#include <build/adjust_seed.hpp>
 
 #include <seqan3/alphabet/nucleotide/dna5.hpp>
+#include <seqan3/search/views/minimiser_hash.hpp>
 
 #include <syncmer.hpp>
 
@@ -65,11 +67,19 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::build::con
 
     parser.add_option(config.kmer_size, '\0', "kmer-size", "size of kmers used for index construction",
                       seqan3::option_spec::standard,
-                      seqan3::arithmetic_range_validator{static_cast<size_t>(1), static_cast<size_t>(30)});
+                      seqan3::arithmetic_range_validator{static_cast<size_t>(1), static_cast<size_t>(64)});
 
     parser.add_option(config.syncmer_size, '\0', "syncmer-size", "size of syncmer used for index construction",
                       seqan3::option_spec::standard,
                       seqan3::arithmetic_range_validator{static_cast<size_t>(1), static_cast<size_t>(26)});
+
+    parser.add_option(config.window_size, '\0', "window-size", "window size of minimizer scheme used for index construction",
+                      seqan3::option_spec::standard,
+                      seqan3::arithmetic_range_validator{static_cast<size_t>(1), static_cast<size_t>(96)});
+
+    parser.add_option(config.scaling, '\0', "scaling", "factor for scaling down syncmer/minimizer sketches",
+                      seqan3::option_spec::standard,
+                      seqan3::arithmetic_range_validator{static_cast<size_t>(10), static_cast<size_t>(1000)});
 
     parser.add_option(config.threads,
                       '\0', "threads",
@@ -89,40 +99,29 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::build::con
                     "Enables debug output in layout file.",
                     seqan3::option_spec::hidden);
 }
-/*
-void sanity_checks(layout::data_store const & data, chopper::layout::configuration & config)
+
+void sanity_checks(taxor::build::configuration & config)
 {
-    if (config.rearrange_user_bins)
-        config.estimate_union = true;
-
-    if (config.estimate_union &&
-        (!std::filesystem::exists(config.sketch_directory) || std::filesystem::is_empty(config.sketch_directory)))
+    if (config.use_syncmer)
     {
-        throw seqan3::argument_parser_error{"The directory " + config.sketch_directory.string() + " must be present "
-                                            "and not empty in order to enable --estimate-union or "
-                                            "--rearrange-user-bins (created with chopper count)."};
+        if (config.kmer_size > 30)
+        {
+            throw seqan3::argument_parser_error{"The chosen k-mer size is too large for the syncmer scheme. Please choose a k-mer size <= 30 or use the minimizer scheme"};
+        }
     }
 
-    if (data.filenames.empty())
-        throw seqan3::argument_parser_error{seqan3::detail::to_string("The file ", config.count_filename.string(),
-                                                                      " appears to be empty.")};
-
-    if (config.aggregate_by_column != -1 && data.extra_information[0].empty())
+    try
     {
-        throw seqan3::argument_parser_error{"Aggregate Error: You want to aggregate by something but your "
-                                            "file does not contain any extra information columns."};
+        std::vector<taxonomy::Species> orgs = taxonomy::parse_refseq_taxonomy_file(config.input_file_name);
     }
-
-    // note that config.aggregate_by_column cannot be 0 or 1 because the parser check the valid range [2, max]
-    assert(config.aggregate_by_column == -1 || config.aggregate_by_column > 1);
-    if ((config.aggregate_by_column - 2/*extrainfo starts at 2*/  /* ) > static_cast<int>(data.extra_information[0].size()))
+    catch (std::out_of_range const &e)
     {
-        throw seqan3::argument_parser_error{"Aggregate Error: You want to aggregate by a column index that "
-                                            "is larger than the number of extra information columns."};
+        throw seqan3::argument_parser_error{"Error parsing the taxonomy file"};    
     }
+    
 }
 
-*/
+
 
 
 size_t determine_best_number_of_technical_bins(chopper::layout::data_store & data, chopper::layout::configuration & config)
@@ -212,6 +211,74 @@ inline auto create_filename_clusters(taxor::build::configuration const taxor_con
     return filename_clusters;
 }
 
+inline void count_minimizers(robin_hood::unordered_map<std::string, std::vector<std::string>> const & filename_clusters,
+                           chopper::count::configuration const & count_config,
+                           taxor::build::configuration const taxor_config)
+{
+    using traits_type = seqan3::sequence_file_input_default_traits_dna;
+    using sequence_file_t = seqan3::sequence_file_input<traits_type, seqan3::fields<seqan3::field::seq>>;
+
+    std::ofstream fout{count_config.count_filename};
+
+    if (!fout.good())
+        throw std::runtime_error{"Could not open file" + count_config.count_filename.string() + " for reading."};
+
+    // create the hll dir if it doesn't already exist
+    if (!count_config.disable_sketch_output)
+        std::filesystem::create_directory(count_config.sketch_directory);
+
+    // copy filename clusters to vector
+    std::vector<std::pair<std::string, std::vector<std::string>>> cluster_vector{};
+    for (auto const & cluster : filename_clusters)
+        cluster_vector.emplace_back(cluster.first, cluster.second);
+
+    seqan3::shape const shape = seqan3::ungapped{taxor_config.kmer_size};
+    auto minimizer_view = seqan3::views::minimiser_hash(shape,
+                                                        seqan3::window_size{taxor_config.window_size},
+                                                        seqan3::seed{hixf::adjust_seed(shape.count())});
+
+    #pragma omp parallel for schedule(static) num_threads(count_config.threads)
+    for (size_t i = 0; i < cluster_vector.size(); ++i)
+    {
+        chopper::sketch::hyperloglog sketch(count_config.sketch_bits);
+
+        std::vector<seqan3::dna5_vector> refs{};
+        for (auto const & filename : cluster_vector[i].second)
+        {
+            for (auto && [seq] : sequence_file_t{filename})
+            {
+			    for (auto hash : seq | minimizer_view)
+                {
+                    if (taxor_config.scaling > 1)
+                    {
+                        uint64_t v = ankerl::unordered_dense::detail::wyhash::hash(hash);
+                        if (double(v) <= double(UINT64_MAX) / double(taxor_config.scaling))
+                        {
+                            sketch.add(hash);
+                        }
+                    }
+                    else
+                    {
+                        sketch.add(hash);
+                    }
+                }
+            }
+		}
+        //process_sequence_files(cluster_vector[i].second, config, sketch);
+
+        // print either the exact or the approximate count, depending on exclusively_hlls
+        uint64_t const weight = sketch.estimate();
+
+        #pragma omp critical
+        chopper::count::write_count_file_line(cluster_vector[i], weight, fout);
+
+        if (!count_config.disable_sketch_output)
+            chopper::count::write_sketch_file(cluster_vector[i], sketch, count_config);
+    }
+}
+
+
+
 inline void count_syncmers(robin_hood::unordered_map<std::string, std::vector<std::string>> const & filename_clusters,
                            chopper::count::configuration const & count_config,
                            taxor::build::configuration const taxor_config)
@@ -219,7 +286,7 @@ inline void count_syncmers(robin_hood::unordered_map<std::string, std::vector<st
     using traits_type = seqan3::sequence_file_input_default_traits_dna;
     using sequence_file_t = seqan3::sequence_file_input<traits_type, seqan3::fields<seqan3::field::seq>>;
 
-    size_t t_syncmer = ceil((taxor_config.kmer_size - taxor_config.syncmer_size) / 2) + 1;
+    size_t t_syncmer = ceil((taxor_config.kmer_size - taxor_config.syncmer_size + 1) / 2);
 
     std::ofstream fout{count_config.count_filename};
 
@@ -247,7 +314,20 @@ inline void count_syncmers(robin_hood::unordered_map<std::string, std::vector<st
             {
 			    ankerl::unordered_dense::set<size_t> syncmer_hashes = hashing::seq_to_syncmers(taxor_config.kmer_size, seq, taxor_config.syncmer_size, t_syncmer);   
                 for (auto &hash : syncmer_hashes)
-                    sketch.add(hash);
+                {
+                    if (taxor_config.scaling > 1)
+                    {
+                        uint64_t v = ankerl::unordered_dense::detail::wyhash::hash(hash);
+                        if (double(v) <= double(UINT64_MAX) / double(taxor_config.scaling))
+                        {
+                            sketch.add(hash);
+                        }
+                    }
+                    else
+                    {
+                        sketch.add(hash);
+                    }
+                }
             }
 		}
         //process_sequence_files(cluster_vector[i].second, config, sketch);
@@ -279,7 +359,13 @@ void create_layout(taxor::build::configuration const taxor_config,
 	chopper::detail::apply_prefix(count_config.output_prefix, count_config.count_filename, count_config.sketch_directory);
     chopper::count::check_filenames(filename_clusters, count_config);
     if (taxor_config.use_syncmer)
+    {
         count_syncmers(filename_clusters, count_config, taxor_config);
+    }
+    else if (taxor_config.window_size > taxor_config.kmer_size)
+    {
+        count_minimizers(filename_clusters, count_config, taxor_config);
+    }
     else
         chopper::count::count_kmers(filename_clusters, count_config);
 
@@ -325,13 +411,14 @@ void build_hixf(taxor::build::configuration const config,
 	args.bin_file = std::filesystem::path{"binning.out"};
 	args.out_path = config.output_file_name;
     args.kmer_size = config.kmer_size;
-    args.window_size = config.kmer_size;
+    args.window_size = config.window_size;
     args.shape = seqan3::shape{seqan3::ungapped{args.kmer_size}};
     args.syncmer_size = config.syncmer_size;
     args.threads = config.threads;
 	args.compute_syncmer = config.use_syncmer;
+    args.scaling = config.scaling;
     if (config.use_syncmer)
-        args.t_syncmer = ceil((args.kmer_size - args.syncmer_size) / 2) + 1;
+        args.t_syncmer = ceil((args.kmer_size - args.syncmer_size + 1) / 2);
 	
     hixf::build_data data{};
    
@@ -357,6 +444,7 @@ void build_hixf(taxor::build::configuration const config,
                                                                                 args.t_syncmer,
                                                                                 args.parts,
                                                                                 args.compute_syncmer,
+                                                                                args.scaling,
                                                                                 args.compressed,
                                                                                 bin_path,
                                                                                 orgs,
@@ -375,8 +463,7 @@ int execute(seqan3::argument_parser & parser)
     try
     {
         parser.parse();
-
-        // TODO: sanity check of parameters
+        sanity_checks(config);
 
     }
     catch (seqan3::argument_parser_error const & ext) // the user did something wrong

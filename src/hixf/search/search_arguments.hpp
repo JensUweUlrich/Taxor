@@ -34,6 +34,7 @@ struct search_arguments
     uint8_t threads{1u};
     uint8_t parts{1u};
     bool compute_syncmer{true};
+    uint16_t scaling{1u};
 
     // Related to thresholding
     double tau{0.9999};

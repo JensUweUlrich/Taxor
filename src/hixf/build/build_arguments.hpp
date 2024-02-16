@@ -24,6 +24,7 @@ struct build_arguments
     bool disable_cutoffs{false};
     uint8_t syncmer_size{10u};
     uint8_t t_syncmer{6u};
+    uint16_t scaling{1u};
 
     // Related to IXF
     std::filesystem::path out_path{"./"};

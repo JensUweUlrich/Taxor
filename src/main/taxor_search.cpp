@@ -9,6 +9,7 @@
 #include <seqan3/core/debug_stream.hpp>
 
 #include <seqan3/search/views/minimiser_hash.hpp>
+#include <seqan3/search/views/fracmin_hash.hpp>
 
 #include <search/search_arguments.hpp>
 #include <search/sync_out.hpp>
@@ -80,6 +81,7 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::search::co
 
 void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && index)
 {
+    double s_factor = 10.0;
     double index_io_time{0.0};
     double reads_io_time{0.0};
     double compute_time{0.0};
@@ -92,6 +94,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         arguments.compute_syncmer = index.use_syncmer();
         arguments.shape_size = index.kmer_size();
         arguments.window_size = index.window_size();
+        arguments.scaling = index.scaling();
         arguments.shape = seqan3::shape{seqan3::ungapped{arguments.shape_size}};
         hixf::threshold_parameters param = arguments.make_threshold_parameters();
         thresholder = hixf::threshold::threshold{param};
@@ -122,35 +125,62 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         }();
         std::string result_string{};
         std::vector<uint64_t> hashes;
+        
+        /*auto scaling = [s_factor](uint64_t i) { uint64_t v = ankerl::unordered_dense::detail::wyhash::hash(i);
+                                                return double(v) <= double(UINT64_MAX) / s_factor; 
+                                              } ;
+        */
 
-        // TODO: choose between minimizer and syncmers
         auto hash_adaptor = seqan3::views::minimiser_hash(arguments.shape,
                                                           seqan3::window_size{arguments.window_size},
-                                                          seqan3::seed{hixf::adjust_seed(arguments.shape.count())});
+                                                          seqan3::seed{hixf::adjust_seed(arguments.shape.count())});      
 
         for (auto && [id, seq] : records | seqan3::views::slice(start, end))
         {
             result_string.clear();
-            
-            if (seq.size() < 1000)
-            {
-                result_string += id + '\t';
-                result_string += "-\t-\t-\t-\t";
-                result_string += std::to_string(seq.size()) + "\n";
-                synced_out.write(result_string);
-                continue;
-            }
 
+            
             if (arguments.compute_syncmer)
             {
                 seqan3::dna5_vector dna5_vector{seq.begin(), seq.end()};
-                ankerl::unordered_dense::set<size_t> strobe_hashes = hashing::seq_to_syncmers(index.kmer_size(),dna5_vector, index.syncmer_size(), index.t_syncmer());
-                hashes.assign(std::make_move_iterator(strobe_hashes.begin()), std::make_move_iterator(strobe_hashes.end()));
+                ankerl::unordered_dense::set<size_t> tmp = hashing::seq_to_syncmers(index.kmer_size(),dna5_vector, index.syncmer_size(), index.t_syncmer());
+                if (arguments.scaling > 1)
+                {
+                    for (auto &hash : tmp)
+                    {
+                        uint64_t v = ankerl::unordered_dense::detail::wyhash::hash(hash);
+                        if (double(v) <= double(UINT64_MAX) / double(arguments.scaling))
+                        {
+                            hashes.push_back(hash);
+                        }
+                    }
+                }
+                else
+                {
+			        hashes.assign(std::make_move_iterator(tmp.begin()), std::make_move_iterator(tmp.end()));
+                }
+
             }
             else
             {
-                auto minimiser_view = seq | hash_adaptor | std::views::common;
-                hashes.assign(minimiser_view.begin(), minimiser_view.end());
+                for (auto hash :  seq | hash_adaptor)
+                {
+                    if (arguments.scaling > 1)
+                    {
+                        uint64_t v = ankerl::unordered_dense::detail::wyhash::hash(hash);
+                        if (double(v) <= double(UINT64_MAX) / double(arguments.scaling))
+                        {
+                            hashes.push_back(hash);
+                        }
+                    }
+                    else
+                    {
+                        hashes.push_back(hash);
+                    }
+                }
+                //auto minimiser_view = seq | hash_adaptor | std::views::common;
+                //hashes.assign(minimiser_view.begin(), minimiser_view.end());
+                
             }
             size_t const hash_count{hashes.size()};
             size_t fp_correction = hash_count * 0.003;

@@ -77,6 +77,7 @@ void compute_hashes(ankerl::unordered_dense::set<size_t> & hashes,
                    build_arguments const & arguments,
                    chopper_pack_record const & record)
 {
+    
     if (arguments.compute_syncmer) 
     {
         for (auto const & filename : record.filenames)
@@ -87,23 +88,26 @@ void compute_hashes(ankerl::unordered_dense::set<size_t> & hashes,
 	    	{
                 //std::cout << "Before compute syncmers" << std::endl << std::flush;
                 ankerl::unordered_dense::set<size_t> tmp = hashing::seq_to_syncmers(arguments.kmer_size, seq, arguments.syncmer_size, arguments.t_syncmer);
-			    hashes.insert(std::make_move_iterator(tmp.begin()), std::make_move_iterator(tmp.end()));
+                if (arguments.scaling > 1)
+                {
+                    for (auto &hash : tmp)
+                    {
+                        uint64_t v = ankerl::unordered_dense::detail::wyhash::hash(hash);
+                        if (double(v) <= double(UINT64_MAX) / double(arguments.scaling))
+                        {
+                            hashes.insert(hash);
+                        }
+                    }
+                }
+                else
+                {
+			        hashes.insert(std::make_move_iterator(tmp.begin()), std::make_move_iterator(tmp.end()));
+                }
                 //std::cout << "After compute syncmers" << std::endl << std::flush;
                 //hashes.insert(hashing::seq_to_syncmers(arguments.kmer_size, seq, arguments.syncmer_size, arguments.t_syncmer));
                 
 		    }
             
-        }
-    }
-    else if (arguments.is_minimiser)
-    {
-        uint64_t minimiser_value{};
-        for (auto const & filename : record.filenames)
-        {
-            std::ifstream infile{filename, std::ios::binary};
-
-            while (infile.read(reinterpret_cast<char *>(&minimiser_value), sizeof(minimiser_value)))
-                hashes.insert(minimiser_value);
         }
     }
     else
@@ -112,12 +116,27 @@ void compute_hashes(ankerl::unordered_dense::set<size_t> & hashes,
         for (auto const & filename : record.filenames)
         {
             for (auto && [seq] : sequence_file_t{filename})
+            {
                 for (auto hash :
                      seq
                          | seqan3::views::minimiser_hash(arguments.shape,
                                                          seqan3::window_size{arguments.window_size},
                                                          seqan3::seed{adjust_seed(arguments.shape.count())}))
-                    hashes.insert(hash);
+                    {
+                        if (arguments.scaling > 1)
+                        {
+                            uint64_t v = ankerl::unordered_dense::detail::wyhash::hash(hash);
+                            if (double(v) <= double(UINT64_MAX) / double(arguments.scaling))
+                            {
+                                hashes.insert(hash);
+                            }
+                        }
+                        else
+                        {
+                            hashes.insert(hash);
+                        }
+                    }
+            }
         }
     }
 }

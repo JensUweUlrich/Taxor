@@ -12,7 +12,9 @@ struct configuration
     std::string output_file_name{}; // provided by user
     int threads{1u};
     int kmer_size{20u};
+    int window_size{20u};
     int syncmer_size{10u};
+    int scaling{1u};
     bool output_verbose_statistics{false};
     bool debug{false};
     bool use_syncmer{false};
