@@ -8,6 +8,7 @@
 
 * [Description](#description)
 * [Installation](#installation)
+* [Databases](#databases)
 * [Commands](#commands)
 * [Usage](#usage)
 
@@ -38,6 +39,15 @@ cd build
 cmake  ../src
 cmake --build . --config Release
 ```
+
+## <a name="databases"></a>Pre-built databases
+Users can easily build custom databases as described below or use the following pre-built database index files
+
+|Kingdom                               |Source                 | Parameters  | Size    | Link         |
+|:-------------------------------------|:----------------------|:------------|:--------|:-------------|
+| Viruses                              | Genbank Release 258   | k=22, s=12  | 373 MB  | [download](https://www.dropbox.com/scl/fi/5ryr0w4ruzxhcq43pz6sn/genbank-viral-k22-s12.hixf?rlkey=5iwxe0y9xcpfy20h6ahv6y4tz&dl=0) |
+| Bacteria, Archaea                    | GTDB Release 214.1    | k=22, s=12  | 71.4 GB | [download](https://www.dropbox.com/scl/fi/1cszq9mnnik63yf15kfy1/gtdb-R214-k22-s12.hixf?rlkey=mvrjnq6oke6ns4a156r6rnl7a&dl=0) |
+| Archaea, Bacteria, Fungi, Viruses    | RefSeq Release 216    | k=22, s=12  | 9.9 GB  | [download](https://www.dropbox.com/scl/fi/k6463vkkapt832g43joco/refseq-abfv-k22-s12.hixf?rlkey=zhudv2l9talt3rurni8r8yc1s&dl=0) |
 
 ## <a name="commands"></a>Commands
 
