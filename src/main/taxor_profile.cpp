@@ -451,8 +451,10 @@ double update_log_prior_probabilities(std::map<std::string, double> &log_priors,
     // for each taxon sum all lengths of matching reads
     size_t all_nts{0};
     size_t unclassified_nts{0};
+    std::cout << "Sum nts of matching reads per taxon..." << std::endl << std::flush;
     for (auto &read : profile_results)
     {
+        if (read.second.size() == 0) continue;
         all_nts += read.second.at(0).query_len;
         if (read.second.at(0).taxid.compare("-") == 0)
         {
@@ -464,7 +466,7 @@ double update_log_prior_probabilities(std::map<std::string, double> &log_priors,
             ref_nts.at(ref.taxid) += ref.query_len;
         }
     }
-    
+    std::cout << "done" << std::endl;
     // calculate average depth of coverage for each taxon
     // sum of all matched read lengths divided by length of taxon reference sequence
     /*double sum_avg_cov{0.0};
@@ -477,6 +479,7 @@ double update_log_prior_probabilities(std::map<std::string, double> &log_priors,
 
     // calculate relative genomic abundance for each taxon
     // divide average coverage of each taxon by the sum of average coverage of all taxa
+    std::cout << "final update..." << std::endl << std::flush;
     for (auto &t : log_priors)
     {
         // only for genome relative abundance
@@ -485,7 +488,7 @@ double update_log_prior_probabilities(std::map<std::string, double> &log_priors,
         // 2nd version uses nucleotide abundance
         log_priors.at(t.first) = log(static_cast<double>(ref_nts.at(t.first)) + 0.000000000001) - log(static_cast<double>(all_nts));
     }
-
+    std::cout << "done" << std::endl << std::flush;
     return log(static_cast<double>(unclassified_nts) + 0.000000000001) - log(static_cast<double>(all_nts));
 
 }
@@ -560,28 +563,47 @@ std::map<std::string, double> expectation_maximization(size_t iterations,
                               std::map<std::string, std::vector<taxonomy::Search_Result>> &search_results,
                               std::map<std::string, std::vector<taxonomy::Search_Result>> &profile_results)
 {
+    std::cout << "started" << std::endl;
+    std::cout << "Initialize prior probabilities ..." << std::flush;
     std::map<std::string, double> log_priors = initialize_prior_log_probabilities(taxa);
+    std::cout << "done" << std::endl;
+    std::cout << "Calculate Log Likelihoods ..." << std::flush;
     std::map<std::string, std::map<std::string, double>> log_likelihoods = calculate_log_likelihoods(search_results);
+    std::cout << "done" << std::endl;
+    std::cout << "Calculate Log Likelihoods" << std::endl << std::flush;
     double cond_log_likelihood = -__DBL_MAX__;
     size_t iter_step = 0;
     double unclassified_abundance{0.0};
     while(iter_step < iterations)
     {
+        std::cout << "Starting EM iteration " << iter_step << std::endl << std::flush;
         double new_cond_log_likelihood = 0;
         profile_results.clear();
         for (auto & read : search_results)
         {
+            if (read.second.size() == 0) continue;
             double max_post = -__DBL_MAX__;
             std::vector<taxonomy::Search_Result> best_match{};
             for (auto &res : read.second)
             {   
+
                 if (read.second.at(0).taxid.compare("-") == 0)
                 {
                     best_match.emplace_back(res);
                     break;
                 }
 
-                double post = log_likelihoods.at(read.first).at(res.taxid) + log_priors.at(res.taxid);
+                double post = 0.0;
+                if (log_likelihoods.contains(read.first) && 
+                    log_likelihoods.at(read.first).contains(res.taxid) &&
+                    log_priors.contains(res.taxid))
+                {
+                    post = log_likelihoods.at(read.first).at(res.taxid) + log_priors.at(res.taxid);
+                }
+                else
+                {
+                    continue;
+                }
 
                 new_cond_log_likelihood += post;
                 if (post >= max_post)
@@ -598,7 +620,9 @@ std::map<std::string, double> expectation_maximization(size_t iterations,
             profile_results.insert(std::move(std::make_pair(read.first, std::move(best_match))));
         }
         // update referencs abundances (priors)
+        std::cout << "Update prior probabilities ..." << std::flush;
         unclassified_abundance = update_log_prior_probabilities(log_priors, taxa, profile_results);
+         std::cout << "done" << std::endl << std::flush;
         double diff = new_cond_log_likelihood - cond_log_likelihood;
         if (diff < abs(log(0.0001)))
             break;
@@ -606,7 +630,7 @@ std::map<std::string, double> expectation_maximization(size_t iterations,
         cond_log_likelihood = new_cond_log_likelihood;
         iter_step++;
     }
-    std::cout << "Number of EM steps needed: " << iter_step << std::endl;
+    std::cout << "Number of EM steps needed: " << iter_step << std::endl << std::flush;
 
     log_priors.insert(std::move(std::make_pair("unclassified", unclassified_abundance)));
     for (auto & t : log_priors)
@@ -632,11 +656,13 @@ void calculate_relative_genomic_abundances(std::map<std::string, double> &log_pr
     // for each taxon sum all lengths of matching reads
     for (auto &read : profile_results)
     {
+        if (read.second.size() == 0) continue;
         if (read.second.at(0).taxid.compare("-") == 0)
             continue;
         for (auto &ref : read.second)
         {
-            ref_nts.at(ref.taxid) += ref.query_len;
+            if (ref_nts.contains(ref.taxid))
+                ref_nts.at(ref.taxid) += ref.query_len;
         }
     }
     
@@ -645,8 +671,11 @@ void calculate_relative_genomic_abundances(std::map<std::string, double> &log_pr
     double sum_avg_cov{0.0};
     for (auto & t : ref_nts)
     {
-        log_priors.at(t.first) = static_cast<double>(t.second) / static_cast<double>(taxa.at(t.first));
-        sum_avg_cov += log_priors.at(t.first);
+        if (log_priors.contains(t.first) && taxa.contains(t.first))
+        {
+            log_priors.at(t.first) = static_cast<double>(t.second) / static_cast<double>(taxa.at(t.first));
+            sum_avg_cov += log_priors.at(t.first);
+        }
     }
     
 
@@ -668,23 +697,42 @@ void calculate_relative_genomic_abundances(std::map<std::string, double> &log_pr
 void tax_profile(taxor::profile::configuration& config)
 {
     // <taxid, <taxid_string, taxname_string>>
+    std::cout << "Parsing search results..." << std::flush;
     std::map<std::string, std::pair<std::string, std::string>> taxpath{};
     std::map<std::string, std::vector<taxonomy::Search_Result>> search_results = parse_search_results(config.search_file, taxpath);
+
+    std::cout << "done" << std::endl;
+    std::cout << "Remove matches to nonunique references..." << std::flush;
 
     // 1st round of reference filtering
     ankerl::unordered_dense::set<std::string> ref_unique_mappings = get_refs_with_uniquely_mapping_reads(search_results);
     remove_matches_to_nonunique_refs(search_results, ref_unique_mappings);
+    ref_unique_mappings.clear();
+
+    std::cout << "done" << std::endl;
+    std::cout << "Remove low confidence references..." << std::flush;
 
     // 2nd round of reference filtering
     std::map<std::string,std::pair<uint64_t,uint64_t>> map_counts = count_unique_ambiguous_mappings_per_reference(search_results);
     // at least 3 uniquely mapped reads & at least 10% of all mappings unique
+    // TODO: may use different parameters for Illumina data
     remove_low_confidence_references(search_results, map_counts, 3, 0.001);
+    map_counts.clear();
    
+    std::cout << "done" << std::endl;
+    std::cout << "Filter associated references..." << std::flush;
+
     std::map<std::string, size_t> found_taxa = filter_ref_associations(search_results);
    
+    std::cout << "done" << std::endl;
+    std::cout << "Start EM algorithm..." << std::flush;
+
     std::map<std::string, std::vector<taxonomy::Search_Result>> profile_results{};
     // returns nucleotide abundances
-    std::map<std::string, double> tax_abundances = expectation_maximization(1000, found_taxa, search_results, profile_results);
+    std::map<std::string, double> tax_abundances = expectation_maximization(10, found_taxa, search_results, profile_results);
+
+    std::cout << "done" << std::endl;
+    std::cout << "Calculate higher rank sequence abundances.." << std::flush;
 
     for (auto & t: tax_abundances)
     {
@@ -692,7 +740,13 @@ void tax_profile(taxor::profile::configuration& config)
             t.second = 0.0;
     }
     std::map<std::string, taxonomy::Profile_Output> rank_profiles = calculate_higher_rank_abundances(tax_abundances,taxpath);
+    std::cout << "done" << std::endl;
+    std::cout << "Write sequence abundances..." << std::flush;
+
     taxonomy::write_sequence_abundance_file(config.sequence_abundance_file, rank_profiles, config.sample_id);
+
+    std::cout << "done" << std::endl;
+    std::cout << "Calculate genomic abundances ..." << std::flush;
 
     calculate_relative_genomic_abundances(tax_abundances, found_taxa, profile_results);
 
@@ -702,12 +756,16 @@ void tax_profile(taxor::profile::configuration& config)
             t.second = 0.0;
     }
 
+    std::cout << "done" << std::endl;
+    std::cout << "Write remaining output files ..." << std::flush;
+
+
     rank_profiles.clear();
     rank_profiles = calculate_higher_rank_abundances(tax_abundances,taxpath);
     
     taxonomy::write_biobox_profiling_file(config.report_file, rank_profiles, config.sample_id);
     taxonomy::write_biobox_binning_file(config.binning_file, profile_results, config.sample_id);
-
+    std::cout << "done" << std::endl;
 }
 
 int execute(seqan3::argument_parser & parser)

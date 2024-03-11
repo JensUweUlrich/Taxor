@@ -86,7 +86,10 @@ void write_biobox_binning_file(std::string &output_file,
 
     for (auto & read : binning_results)
     {
-        fout << read.first << "\t" << read.second.at(0).taxid << "\n";
+        if (read.second.size() == 0)
+            fout << read.first << "\t-\n";
+        else
+            fout << read.first << "\t" << read.second.at(0).taxid << "\n";
     }
 
 
