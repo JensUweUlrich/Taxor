@@ -28,7 +28,7 @@ Benchmarking results based on simulated and real long-read data sets demonstrate
 
 ## <a name="installation"></a>Installation
 
-The easiest way is to simply download [executable binaries](https://github.com/shenwei356/kmcp/releases) for Linux x86_64. <br>
+The easiest way is to install Taxor via [Conda](https://bioconda.github.io/recipes/taxor/README.html#package-taxor). <br>
 However, you can also build Taxor on your own using the following commands. Just make sure that you have installed [CMake](https://cmake.org/) (>=3.16) and [GCC](https://gcc.gnu.org/) (>= 10).
 
 ```
