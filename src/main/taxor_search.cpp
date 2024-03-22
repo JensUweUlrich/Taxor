@@ -31,7 +31,7 @@ namespace taxor::search
 
 void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::search::configuration & config)
 {
-    parser.info.version = "0.1.0";
+    parser.info.version = "0.1.3";
     parser.info.author = "Jens-Uwe Ulrich";
     parser.info.email = "jens-uwe.ulrich@hpi.de";
     parser.info.short_description = "Queries a file of DNA sequences against an HIXF index";

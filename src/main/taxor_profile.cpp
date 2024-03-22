@@ -15,7 +15,7 @@ namespace taxor::profile
 
 void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::profile::configuration & config)
 {
-    parser.info.version = "0.1.0";
+    parser.info.version = "0.1.3";
     parser.info.author = "Jens-Uwe Ulrich";
     parser.info.email = "jens-uwe.ulrich@hpi.de";
     parser.info.short_description = "Taxonomic profiling of a sample by giving read matching results of Taxor search";
@@ -46,6 +46,11 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::profile::c
     parser.add_option(config.sample_id, '\0', "sample-id", 
                       "Identifier of the analyzed sample",
                       seqan3::option_spec::required);
+
+    parser.add_option(config.threshold, '\0', "min-abundance",
+                      "Minimum abundance to report (default: 0.001)",
+                      seqan3::option_spec::standard,
+                      seqan3::arithmetic_range_validator{static_cast<double>(0.0), static_cast<double>(1.0)});
 
     parser.add_option(config.threads,
                       '\0', "threads",
@@ -736,7 +741,7 @@ void tax_profile(taxor::profile::configuration& config)
 
     for (auto & t: tax_abundances)
     {
-        if (t.second < 0.001)
+        if (t.second < config.threshold)
             t.second = 0.0;
     }
     std::map<std::string, taxonomy::Profile_Output> rank_profiles = calculate_higher_rank_abundances(tax_abundances,taxpath);
@@ -752,7 +757,7 @@ void tax_profile(taxor::profile::configuration& config)
 
     for (auto & t: tax_abundances)
     {
-        if (t.second < 0.001)
+        if (t.second < config.threshold)
             t.second = 0.0;
     }
 
