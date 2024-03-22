@@ -48,7 +48,7 @@ using sequence_file_t = seqan3::sequence_file_input<hixf::dna4_traits, seqan3::f
 
 void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::build::configuration & config)
 {
-    parser.info.version = "0.1.0";
+    parser.info.version = "0.1.3";
     parser.info.author = "Jens-Uwe Ulrich";
     parser.info.email = "jens-uwe.ulrich@hpi.de";
     parser.info.short_description = "Creates an HIXF index of a given set of fasta files";
