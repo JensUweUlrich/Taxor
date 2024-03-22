@@ -12,7 +12,7 @@ struct configuration
     std::string report_file{};
     std::string sequence_abundance_file{};
     std::string sample_id{};
-    //double threshold{-1.0};
+    double threshold{0.001};
     //double error_rate{0.04};
     uint8_t threads{1u};
     bool output_verbose_statistics{false};
