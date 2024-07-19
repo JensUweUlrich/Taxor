@@ -8,7 +8,7 @@ namespace taxor::taxonomy
 struct Search_Result
 {
     std::string read_id;
-    std::string taxid;
+    std::string accession_id;
     uint64_t ref_len;
     uint64_t query_len;
     uint64_t query_hash_count;

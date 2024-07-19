@@ -67,6 +67,7 @@ void write_sequence_abundance_file(std::string &output_file,
     {
         for (auto & rank : tax_rank_abundances)
         {
+            //std::cout << tr << "\t" << rank.second.taxid << std::endl;
             if (rank.second.rank.compare(tr) == 0)
                 fout << rank.second.taxid << "\t" << rank.second.rank << "\t" << rank.second.taxid_string << "\t"
                         << rank.second.taxname_string << "\t" << format(rank.second.percentage*100,6) << "\n";
@@ -82,14 +83,14 @@ void write_biobox_binning_file(std::string &output_file,
     std::ofstream fout{output_file};
     fout << "@SampleID:" << sample_id << "\n";
     fout << "@Version:0.10.0\n";
-    fout << "@@SEQUENCEID\tTAXID\n";
+    fout << "@@SEQUENCEID\tACCESSIONID\n";
 
     for (auto & read : binning_results)
     {
         if (read.second.size() == 0)
             fout << read.first << "\t-\n";
         else
-            fout << read.first << "\t" << read.second.at(0).taxid << "\n";
+            fout << read.first << "\t" << read.second.at(0).accession_id << "\n";
     }
 
 
