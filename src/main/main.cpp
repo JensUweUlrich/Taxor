@@ -53,7 +53,7 @@ int main(int argc, char const **argv)
 
 	seqan3::argument_parser top_level_parser{"taxor", argc, argv, seqan3::update_notifications::off,
                                              {"build", "search", "profile"}};
-    top_level_parser.info.version = "0.1.3";
+    top_level_parser.info.version = "0.2.0";
 
     try
     {

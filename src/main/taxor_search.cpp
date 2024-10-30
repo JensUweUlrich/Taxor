@@ -31,10 +31,10 @@ namespace taxor::search
 
 void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::search::configuration & config)
 {
-    parser.info.version = "0.1.3";
+    parser.info.version = "0.2.0";
     parser.info.author = "Jens-Uwe Ulrich";
     parser.info.email = "jens-uwe.ulrich@hpi.de";
-    parser.info.short_description = "Queries a file of DNA sequences against an HIXF index";
+    parser.info.short_description = "Queries files of DNA sequences against a list of HIXF index files";
 
     parser.info.description.emplace_back("Query sequences against the taxor HIXF index structure");
 
@@ -79,7 +79,78 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::search::co
                     seqan3::option_spec::hidden);
 }
 
-void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && index)
+std::vector<std::string> str_split(std::string &str, char delimiter)
+{
+
+    std::stringstream str_stream(str);
+    std::string segment;
+    std::vector<std::string> seglist;
+
+    while(std::getline(str_stream, segment, delimiter))
+    {
+        seglist.push_back(segment);
+    }
+
+    return std::move(seglist);
+}
+
+void sanity_checks(taxor::search::configuration & config)
+{
+    // enable using seveal index files
+    config.index_file_list = str_split(config.index_file, ',');
+
+    // check whether all index files exist
+    // check whether all index files use the same k-mer scheme
+    bool compute_syncmer{false};
+    uint16_t scaling{1u};
+    uint32_t window_size{1u};
+    uint8_t kmer_size{1u};
+    uint8_t syncmer_size{1u};
+    uint8_t t_syncmer{1u};
+    for (std::string & f : config.index_file_list)
+    {   
+        std::filesystem::path filepath{f};
+        if (!std::filesystem::exists(filepath))
+            throw seqan3::argument_parser_error{"Please check the given index file(s). \nThe following index file does not exist: " + f};
+        
+        if (config.index_file_list.size() > 1)
+        {
+            auto index = taxor_index<hixf_t>{};
+            double index_io_time{0.0};
+            load_index(index, filepath, index_io_time);
+            if (kmer_size == 1)
+            {
+                kmer_size = index.kmer_size();
+                window_size = index.window_size();
+                scaling = index.scaling();
+                syncmer_size = index.syncmer_size();
+                t_syncmer = index.t_syncmer();
+                compute_syncmer = index.use_syncmer();
+                continue;
+            }
+            
+            if (kmer_size != index.kmer_size() || window_size != index.window_size() || scaling != index.scaling() ||
+                syncmer_size != index.syncmer_size() || t_syncmer != index.t_syncmer() || compute_syncmer != index.use_syncmer())
+                throw seqan3::argument_parser_error{"At least two index files have been created with different kmer selection schemes.\n Please provide only index files using the same kmer-/syncmer-/window-size!"};
+            
+        }
+    }
+
+    // enable using several input directories
+    config.query_file_list = str_split(config.query_file, ',');
+    
+    // check whether all input files exist
+    for (std::string & f : config.query_file_list)
+    {   
+        std::filesystem::path filepath{f};
+        if (!std::filesystem::exists(filepath))
+            throw seqan3::argument_parser_error{"Please check the given input query files. \nThe following query file does not exist: " + f};
+    }
+
+
+}
+
+void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && index, hixf::sync_out &outstrm)
 {
     double s_factor = 10.0;
     double index_io_time{0.0};
@@ -107,12 +178,12 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
     using record_type = typename decltype(fin)::record_type;
     std::vector<record_type> records{};
 
-    hixf::sync_out synced_out{arguments.out_file};
+/*    hixf::sync_out synced_out{arguments.out_file};
 
     {
         synced_out << "#QUERY_NAME\tACCESSION\tREFERENCE_NAME\tTAXID\tREF_LEN\tQUERY_LEN\tQHASH_COUNT\tQHASH_MATCH\tTAX_STR\tTAX_ID_STR\n";
     }
-
+*/
     
     std::mutex count_mutex;
     double mean_sum{0.0};
@@ -232,7 +303,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
             count_mutex.lock();
             reads++;
             count_mutex.unlock();
-            synced_out.write(result_string);
+            outstrm.write(result_string);
         }
     };
   
@@ -263,16 +334,24 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
 
 void search_hixf(taxor::search::configuration const config)
 {
-    hixf::search_arguments search_args{};
-	search_args.index_file = config.index_file; 
-	search_args.query_file = config.query_file;
-	search_args.out_file = config.report_file;
-    search_args.threshold = config.threshold;
-    search_args.threads = config.threads;
-    search_args.seq_error_rate = config.error_rate;
-    
-	auto index = taxor_index<hixf_t>{};
-    search_single(search_args, std::move(index));
+    hixf::sync_out synced_out{config.report_file};
+    synced_out << "#QUERY_NAME\tACCESSION\tREFERENCE_NAME\tTAXID\tREF_LEN\tQUERY_LEN\tQHASH_COUNT\tQHASH_MATCH\tTAX_STR\tTAX_ID_STR\n";
+    for (std::string query : config.query_file_list)
+    {
+        for (std::string hixf_file : config.index_file_list)
+        {
+            hixf::search_arguments search_args{};
+            search_args.index_file = hixf_file; 
+            search_args.query_file = query;
+    //	    search_args.out_file = config.report_file;
+            search_args.threshold = config.threshold;
+            search_args.threads = config.threads;
+            search_args.seq_error_rate = config.error_rate;
+        
+            auto index = taxor_index<hixf_t>{};
+            search_single(search_args, std::move(index), synced_out);
+        }
+    }
 }
 
 
@@ -287,13 +366,15 @@ int execute(seqan3::argument_parser & parser)
     try
     {
         parser.parse();
+        std::cout << "checking input ... " << std::flush;
+        sanity_checks(config);
+        std::cout << "done!" << std::endl;
 
-        // TODO: sanity check of parameters
 
     }
     catch (seqan3::argument_parser_error const & ext) // the user did something wrong
     {
-        std::cerr << "[TAXOR BUILD ERROR] " << ext.what() << '\n';
+        std::cerr << "[TAXOR SEARCH ERROR] " << ext.what() << '\n';
         return -1;
     }
 

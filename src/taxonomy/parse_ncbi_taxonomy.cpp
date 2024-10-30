@@ -32,6 +32,8 @@ namespace taxor::taxonomy
 			std::size_t found = line[2].find_last_of("/\\");
 			if (found != std::string::npos)
 				sp.file_stem = line[2].substr(found+1);
+			if (sp.file_stem.compare("") == 0 || sp.file_stem.compare(" ") == 0)
+				throw std::runtime_error{"No file name found for" + sp.accession_id + " !!!"};
 			
 			org_list.emplace_back(std::move(sp));
 	 	}

@@ -10,6 +10,8 @@
 
 #include <iostream>
 #include <filesystem>
+#include <regex>
+#include <type_traits>
 
 #include <chopper/count/read_data_file.hpp>
 #include <chopper/detail_apply_prefix.hpp>
@@ -48,7 +50,7 @@ using sequence_file_t = seqan3::sequence_file_input<hixf::dna4_traits, seqan3::f
 
 void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::build::configuration & config)
 {
-    parser.info.version = "0.1.3";
+    parser.info.version = "0.2.0";
     parser.info.author = "Jens-Uwe Ulrich";
     parser.info.email = "jens-uwe.ulrich@hpi.de";
     parser.info.short_description = "Creates an HIXF index of a given set of fasta files";
@@ -100,6 +102,21 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::build::con
                     seqan3::option_spec::hidden);
 }
 
+std::vector<std::string> str_split(std::string &str, char delimiter)
+{
+
+    std::stringstream str_stream(str);
+    std::string segment;
+    std::vector<std::string> seglist;
+
+    while(std::getline(str_stream, segment, delimiter))
+    {
+        seglist.push_back(segment);
+    }
+
+    return std::move(seglist);
+}
+
 void sanity_checks(taxor::build::configuration & config)
 {
     if (config.use_syncmer)
@@ -110,19 +127,43 @@ void sanity_checks(taxor::build::configuration & config)
         }
     }
 
-    try
-    {
-        std::vector<taxonomy::Species> orgs = taxonomy::parse_refseq_taxonomy_file(config.input_file_name);
+    // enable using seveal input file
+    config.input_files = str_split(config.input_file_name, ',');
+
+    // check whether all input files exist
+    for (std::string & f : config.input_files)
+    {   
+        std::filesystem::path filepath{f};
+        if (!std::filesystem::exists(filepath))
+            throw seqan3::argument_parser_error{"Please check the given input file(s). \nThe following input file does not exist: " + f};
     }
-    catch (std::out_of_range const &e)
+
+    // check whether taxonomy files have correct input format
+    for (std::string & f : config.input_files)
     {
-        throw seqan3::argument_parser_error{"Error parsing the taxonomy file"};    
+        try
+        {
+            std::vector<taxonomy::Species> orgs = taxonomy::parse_refseq_taxonomy_file(f);
+        }
+        catch (std::out_of_range const &e)
+        {
+            throw seqan3::argument_parser_error{"Error parsing the taxonomy file: " + f};    
+        }
     }
+
+    // enable using several input directories
+    config.input_folders = str_split(config.input_sequence_folder, ',');
     
+    // check whether all input files exist
+    for (std::string & f : config.input_folders)
+    {   
+        std::filesystem::path filepath{f};
+        if (!std::filesystem::exists(filepath))
+            throw seqan3::argument_parser_error{"Please check the given input folder(s). \nThe following input folder does not exist: " + f};
+    }
+
+
 }
-
-
-
 
 size_t determine_best_number_of_technical_bins(chopper::layout::data_store & data, chopper::layout::configuration & config)
 {
@@ -191,6 +232,23 @@ size_t determine_best_number_of_technical_bins(chopper::layout::data_store & dat
     return max_hixf_id;
 }
 
+template < bool RECURSIVE > std::vector<std::filesystem::path> file_list( std::filesystem::path dir, std::regex pattern )
+{
+    std::vector<std::filesystem::path> result ;
+
+    using iterator = std::conditional< RECURSIVE, 
+                                       std::filesystem::recursive_directory_iterator, std::filesystem::directory_iterator >::type ;
+
+    const iterator end ;
+    for( iterator iter { dir } ; iter != end ; ++iter )
+    {
+        const std::string fname = iter->path().filename().string() ;
+        if( std::filesystem::is_regular_file(*iter) && std::regex_match( fname, pattern ) ) result.push_back( *iter ) ;
+    }
+    
+    return result ;
+}
+
 inline auto create_filename_clusters(taxor::build::configuration const taxor_config, 
                                      std::vector<taxonomy::Species> &orgs,
                                      std::map<std::string, uint64_t> &user_bin_map)
@@ -199,11 +257,30 @@ inline auto create_filename_clusters(taxor::build::configuration const taxor_con
 
     for (uint64_t org_index = 0; org_index < orgs.size(); ++org_index) //auto& species : orgs)
     {
-        std::string filepath = taxor_config.input_sequence_folder + "/" + orgs[org_index].file_stem + "_genomic.fna.gz";
-        if (!std::filesystem::exists(std::filesystem::path{filepath}))
-            filepath = taxor_config.input_sequence_folder + "/" + orgs[org_index].file_stem + ".fna.gz";
-        if (!std::filesystem::exists(std::filesystem::path{filepath}))
-            filepath = taxor_config.input_sequence_folder + "/" + orgs[org_index].file_stem;
+        std::string reg = "^" + orgs[org_index].file_stem + "[\\_a-z]*\\.[a-z\\.]+";
+        std::regex reg1(reg);
+        bool found = false;
+        std::string filepath{};
+        for (std::string folder : taxor_config.input_folders)
+        {
+
+            std::filesystem::path fpath{folder};
+            std::vector<std::filesystem::path> files = file_list<false>(fpath, reg1);
+            
+            if (files.size() == 1)
+            {
+                filepath = files[0].string();
+                found = true;
+                break;
+            }
+
+            if (files.size() > 1)
+                throw std::logic_error{"More than one file was found for " + orgs[org_index].accession_id + " in " + folder};
+        }
+
+        if (!found)
+            throw std::logic_error{"Could not find a genome file for " + orgs[org_index].accession_id};
+
         filename_clusters[orgs.at(org_index).accession_id].push_back(filepath);
         user_bin_map.emplace(std::make_pair(filepath, org_index));
     }
@@ -353,11 +430,21 @@ void create_layout(taxor::build::configuration const taxor_config,
 	count_config.k = taxor_config.kmer_size;
 	count_config.threads = taxor_config.threads;
 	count_config.output_prefix = "chopper";
-    auto filename_clusters = create_filename_clusters(taxor_config, orgs, user_bin_map);
-	//auto filename_clusters = chopper::count::read_data_file(config);
-
-	chopper::detail::apply_prefix(count_config.output_prefix, count_config.count_filename, count_config.sketch_directory);
-    chopper::count::check_filenames(filename_clusters, count_config);
+    robin_hood::unordered_map<std::string, std::vector<std::string>> filename_clusters {};
+    try
+    {
+        filename_clusters = create_filename_clusters(taxor_config, orgs, user_bin_map);
+        chopper::detail::apply_prefix(count_config.output_prefix, count_config.count_filename, count_config.sketch_directory);
+        chopper::count::check_filenames(filename_clusters, count_config);
+    }
+    catch(const std::exception& e)
+    {
+        throw;
+    }
+    
+    
+    return;
+	
     if (taxor_config.use_syncmer)
     {
         count_syncmers(filename_clusters, count_config, taxor_config);
@@ -463,7 +550,9 @@ int execute(seqan3::argument_parser & parser)
     try
     {
         parser.parse();
+        std::cout << "checking input ... " << std::flush;
         sanity_checks(config);
+        std::cout << "done!" << std::endl;
 
     }
     catch (seqan3::argument_parser_error const & ext) // the user did something wrong
@@ -472,24 +561,35 @@ int execute(seqan3::argument_parser & parser)
         return -1;
     }
 
-    /*std::cout << (int)config.kmer_size << std::endl << std::flush;
-    using namespace seqan3::literals;
-    seqan3::dna5_vector dna5_vec = "GAAATCATCCATCGACCTTACTAGTATGACCAAAAAGGTCAATTTTATTTTTGATGGGGCAGGTCGGCTTCAGTCAGACT"_dna5;
-    std::vector<uint64_t> syncmer_hashes = hashing::seq_to_syncmers(config.kmer_size, dna5_vec, 6, 14);
 
-    return 0;
-*/
+    // parse taxonomy input files
+    std::cout << "parsing taxonomy input files ... " << std::flush;
+    std::vector<taxonomy::Species> orgs {};
 
+    for (std::string &f : config.input_files)
+    {
+        std::vector<taxonomy::Species> org_tmp = taxonomy::parse_refseq_taxonomy_file(f);
+        orgs.insert(orgs.end(), org_tmp.begin(), org_tmp.end());
+    }
+    std::cout << "done!" << std::endl;
 
-    std::vector<taxonomy::Species> orgs = taxonomy::parse_refseq_taxonomy_file(config.input_file_name);
+    std::cout << "creating HIXF layout ... " << std::flush;
     // map filename to index of species in orgs vector 
     std::map<std::string, uint64_t> user_bin_map{};
-    create_layout(config, orgs, user_bin_map);
-    //return 0;
-    std::cout << "layout created" << std::endl;
-
+    try
+    {
+        create_layout(config, orgs, user_bin_map);
+    }
+    catch (std::exception const &e)
+    {
+        std::cerr << "[TAXOR BUILD ERROR] " << e.what() << '\n';
+        return -1;
+    }
+    
+    std::cout << "done!" << std::endl;
+    std::cout << "building HIXF index ... " << std::flush;
     build_hixf(config, orgs, user_bin_map);
-
+    std::cout << "done!" << std::endl;
 
     return 0;
 }
