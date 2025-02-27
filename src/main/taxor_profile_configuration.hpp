@@ -17,6 +17,7 @@ struct configuration
     uint8_t threads{1u};
     bool output_verbose_statistics{false};
     bool debug{false};
+    uint16_t em_steps{100};
 };
 
 }

@@ -18,7 +18,7 @@ namespace taxor::profile
 
 void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::profile::configuration & config)
 {
-    parser.info.version = "0.1.3";
+    parser.info.version = "0.2.0";
     parser.info.author = "Jens-Uwe Ulrich";
     parser.info.email = "jens-uwe.ulrich@hpi.de";
     parser.info.short_description = "Taxonomic profiling of a sample by giving read matching results of Taxor search";
@@ -55,11 +55,11 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::profile::c
                       seqan3::option_spec::standard,
                       seqan3::arithmetic_range_validator{static_cast<double>(0.0), static_cast<double>(1.0)});
 
-    parser.add_option(config.threads,
-                      '\0', "threads",
-                      "The number of threads to use.",
+    parser.add_option(config.em_steps,
+                      '\0', "em-steps",
+                      "The number of steps for the expectation maximization (EM) algorithm (default: 100).",
                       seqan3::option_spec::standard,
-                      seqan3::arithmetic_range_validator{static_cast<size_t>(1), static_cast<size_t>(32)});
+                      seqan3::arithmetic_range_validator{static_cast<size_t>(1), static_cast<size_t>(1000)});
 
 
     parser.add_flag(config.output_verbose_statistics,
@@ -523,7 +523,7 @@ double update_log_prior_probabilities(std::map<std::string, double> &log_priors,
     // for each taxon sum all lengths of matching reads
     size_t all_nts{0};
     size_t unclassified_nts{0};
-    std::cout << "Sum nts of matching reads per taxon..." << std::endl << std::flush;
+    //std::cout << "Sum nts of matching reads per taxon..." << std::endl << std::flush;
     for (auto &read : profile_results)
     {
         if (read.second.size() == 0) continue;
@@ -824,7 +824,7 @@ void tax_profile(taxor::profile::configuration& config)
 
     std::map<std::string, std::vector<taxonomy::Search_Result>> profile_results{};
     // returns nucleotide abundances
-    std::map<std::string, double> tax_abundances = expectation_maximization(10, found_taxa, search_results, profile_results);
+    std::map<std::string, double> tax_abundances = expectation_maximization(config.em_steps, found_taxa, search_results, profile_results);
 
     std::cout << "done" << std::endl;
     std::cout << "Calculate higher rank sequence abundances.." << std::flush;
