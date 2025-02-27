@@ -232,18 +232,34 @@ size_t determine_best_number_of_technical_bins(chopper::layout::data_store & dat
     return max_hixf_id;
 }
 
-template < bool RECURSIVE > std::vector<std::filesystem::path> file_list( std::filesystem::path dir, std::regex pattern )
+/**
+ * @return map<accession_id, filpath>
+ */
+template < bool RECURSIVE > std::map<std::string, std::filesystem::path> file_list( std::vector<std::string> input_folders)
 {
-    std::vector<std::filesystem::path> result ;
+    std::map<std::string, std::filesystem::path> result ;
 
     using iterator = std::conditional< RECURSIVE, 
                                        std::filesystem::recursive_directory_iterator, std::filesystem::directory_iterator >::type ;
-
-    const iterator end ;
-    for( iterator iter { dir } ; iter != end ; ++iter )
+    for (std::string folder : input_folders)
     {
-        const std::string fname = iter->path().filename().string() ;
-        if( std::filesystem::is_regular_file(*iter) && std::regex_match( fname, pattern ) ) result.push_back( *iter ) ;
+        std::filesystem::path fpath{folder};
+   
+        const iterator end ;
+        for( iterator iter {folder} ; iter != end ; ++iter )
+        {
+            const std::string fname = iter->path().filename().string() ;
+            if( std::filesystem::is_regular_file(*iter)) 
+            {
+                std::string filename = (*iter).path().stem().string();
+                std::vector<std::string> file_parts = str_split(filename, '_');
+                if (file_parts.size() > 1)
+                {
+                    std::string accession = file_parts[0] + "_" + file_parts[1];
+                    result.emplace(std::make_pair(accession, *iter)) ;
+                }
+            }
+        }   
     }
     
     return result ;
@@ -254,33 +270,21 @@ inline auto create_filename_clusters(taxor::build::configuration const taxor_con
                                      std::map<std::string, uint64_t> &user_bin_map)
 {
     robin_hood::unordered_map<std::string, std::vector<std::string>> filename_clusters;
-
+    std::map<std::string, std::filesystem::path> files = file_list<false>(taxor_config.input_folders);
     for (uint64_t org_index = 0; org_index < orgs.size(); ++org_index) //auto& species : orgs)
     {
         std::string reg = "^" + orgs[org_index].file_stem + "[\\_a-z]*\\.[a-z\\.]+";
         std::regex reg1(reg);
         bool found = false;
         std::string filepath{};
-        for (std::string folder : taxor_config.input_folders)
+        if (files.contains(orgs[org_index].accession_id))
         {
-
-            std::filesystem::path fpath{folder};
-            std::vector<std::filesystem::path> files = file_list<false>(fpath, reg1);
-            
-            if (files.size() == 1)
-            {
-                filepath = files[0].string();
-                found = true;
-                break;
-            }
-
-            if (files.size() > 1)
-                throw std::logic_error{"More than one file was found for " + orgs[org_index].accession_id + " in " + folder};
+            filepath = files.at(orgs[org_index].accession_id).string();
         }
-
-        if (!found)
+        else
+        {
             throw std::logic_error{"Could not find a genome file for " + orgs[org_index].accession_id};
-
+        }
         filename_clusters[orgs.at(org_index).accession_id].push_back(filepath);
         user_bin_map.emplace(std::make_pair(filepath, org_index));
     }
@@ -425,6 +429,7 @@ void create_layout(taxor::build::configuration const taxor_config,
                    std::vector<taxonomy::Species> &orgs,
                    std::map<std::string, uint64_t> &user_bin_map)
 {
+
 	chopper::count::configuration count_config{};
 	//config.data_file = taxor_config.input_file_name;
 	count_config.k = taxor_config.kmer_size;
@@ -441,9 +446,6 @@ void create_layout(taxor::build::configuration const taxor_config,
     {
         throw;
     }
-    
-    
-    return;
 	
     if (taxor_config.use_syncmer)
     {
@@ -480,7 +482,7 @@ void create_layout(taxor::build::configuration const taxor_config,
     size_t max_hixf_id;
     max_hixf_id = determine_best_number_of_technical_bins(data, layout_config);
     
-    std::cout << "write Layout header" << std::endl;
+    std::cout << "write Layout header" << std::endl << std::flush;
 
     // brief Write the output to the layout file.
     std::ofstream fout{layout_config.output_filename};

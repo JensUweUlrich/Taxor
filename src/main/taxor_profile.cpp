@@ -1,6 +1,9 @@
 
-
-#include <math.h> 
+#include <seqan3/utility/views/chunk.hpp>
+#include <seqan3/utility/range/to.hpp>
+#include <ranges>
+#include <math.h>
+#include <algorithm> 
 
 #include "taxor_profile_configuration.hpp"
 #include "taxor_profile.hpp"
@@ -90,14 +93,30 @@ std::vector<std::string> str_split(std::string &str, char delimiter)
 std::map<std::string, std::vector<taxonomy::Search_Result>> parse_search_results(std::string const filepath,
                                                                     std::map<std::string, std::pair<std::string, std::string>> &taxpath)
 {
-    std::vector<std::vector<std::string> > tax_file_lines{};
-    taxonomy::read_tsv(filepath, tax_file_lines);
+    //std::vector<std::vector<std::string> > tax_file_lines{};
+    //taxonomy::read_tsv(filepath, tax_file_lines);
     uint64_t species_counter = 0;
 	std::map<std::string, std::vector<taxonomy::Search_Result>> results{};
 
     size_t idx = 0;
-	for (std::vector<std::string> line : tax_file_lines)
-	{
+
+    std::ifstream ifs(filepath);
+    if (ifs.fail()) 
+    {
+        throw std::runtime_error{"Could not open search results file: " + filepath};
+    }
+    std::string tmpline;
+
+	while (getline(ifs, tmpline)) {
+
+        std::stringstream ss(tmpline);
+        std::vector<std::string> line;
+        std::string tmp;
+        while (getline(ss, tmp, '\t')) 
+        {
+            line.push_back(tmp);
+        }
+
         if (idx++ == 0) 
             continue;
         std::string read_id = line[0];
@@ -114,6 +133,7 @@ std::map<std::string, std::vector<taxonomy::Search_Result>> parse_search_results
         else
         {
             res.accession_id = line[1];
+            res.tax_id = line[3];
             res.ref_len = std::stoull(line[4]);
             res.query_len = std::stoull(line[5]);
             res.query_hash_count = std::stoull(line[6]);
@@ -129,6 +149,12 @@ std::map<std::string, std::vector<taxonomy::Search_Result>> parse_search_results
 		if (!results.contains(read_id))
         {
             results.insert(std::move(std::make_pair(read_id, std::vector<taxonomy::Search_Result>{})));
+        }
+
+        // don't add null result if read already has a reference assignment
+        if (results.at(read_id).size() > 0 && res.accession_id.compare("-") == 0)
+        {
+            continue;
         }
         results.at(read_id).emplace_back(std::move(res));
 	}
@@ -165,15 +191,32 @@ void remove_matches_to_nonunique_refs(std::map<std::string, std::vector<taxonomy
     {
         if (pair.second.size() > 1)
         {   
-            search_iterator = pair.second.begin();
+            
+            // first check whether read maps to at least one reference with a uniquely mapping read
+            bool unique = false;
             uint64_t query_len = 0;
-            while (search_iterator != pair.second.end())
+            for (search_iterator = pair.second.begin(); search_iterator != pair.second.end(); ++search_iterator)
             {
                 query_len = (*search_iterator).query_len;
-                if (!ref_unique_mappings.contains((*search_iterator).accession_id))
-                    search_iterator = pair.second.erase(search_iterator);
-                else
-                    search_iterator++;
+                if (ref_unique_mappings.contains((*search_iterator).accession_id))
+                {
+                    unique = true;
+                    break;
+                }
+            }
+
+            // only remove ambiguous read-to-reference assignments if at least one ref with a uniquely mapping read matches this read
+            if (unique)
+            {
+                search_iterator = pair.second.begin();
+                while (search_iterator != pair.second.end())
+                {
+                    query_len = (*search_iterator).query_len;
+                    if (!ref_unique_mappings.contains((*search_iterator).accession_id))
+                        search_iterator = pair.second.erase(search_iterator);
+                    else
+                        search_iterator++;
+                }
             }
 
             if (pair.second.size() == 0)
@@ -235,15 +278,18 @@ void remove_low_confidence_references(std::map<std::string, std::vector<taxonomy
     remove_matches_to_nonunique_refs(search_results, accepted_refs);
 }
 
+
 /** 
  * Filtering out suspicious mappings using an approach similar to
  * the two-stage taxonomy assignment algorithm in MegaPath (Leung et al., 2020)
 */
-std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std::vector<taxonomy::Search_Result>> &search_results)
+std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std::vector<taxonomy::Search_Result>> &search_results, uint8_t threads)
 {
-    std::map<std::string, Ref_Map_Info> ref_associations{};
+    
     // taxid, length
     std::map<std::string, size_t> taxa_lengths{};
+    std::map<std::string, Ref_Map_Info> ref_associations{};
+
     for (auto & pair : search_results)
     {
         if (pair.second.size() == 0) continue;
@@ -298,7 +344,7 @@ std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std:
 
         }
     }
-
+   
     // first is explained by second => exchange first with second
     std::map<std::string, std::string> explained_refs{};
     // iterate over all found references
@@ -307,25 +353,43 @@ std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std:
         // find associated references that explain by ref
         for (auto & assoc_ref : ref.second.associated_species)
         {
-            // if more than 95% of ref's mapped reads also map to current associated ref
-            if (ref.second.all_assigned_reads - assoc_ref.second < static_cast<uint64_t>(0.05 * static_cast<double>(ref.second.all_assigned_reads)))
+            // use the ref with more unique mappings as master
+            // only use ref if it has more uniquely mapping reads or overall more mapped reads than the associated species
+            if (ref.second.unique_assign_reads > ref_associations.at(assoc_ref.first).unique_assign_reads || ref.second.all_assigned_reads > ref_associations.at(assoc_ref.first).all_assigned_reads)
             {
-                // if the number of uniquely mapped reads of ref is less then 5% the number of uniquely mapped reads of associated ref
-                if (ref.second.unique_assign_reads < static_cast<uint64_t>(0.05 * static_cast<double>(ref_associations.at(assoc_ref.first).unique_assign_reads)))
+                // if more than 95% of ref's mapped reads also map to current associated ref
+                if (ref.second.all_assigned_reads - assoc_ref.second < static_cast<uint64_t>(0.05 * static_cast<double>(ref.second.all_assigned_reads)))
                 {
-                    explained_refs.insert(std::move(std::make_pair(ref.first, assoc_ref.first)));
+                    // if the number of uniquely mapped reads of ref is less then 5% the number of uniquely mapped reads of associated ref
+                    //if (ref.second.unique_assign_reads < static_cast<uint64_t>(0.05 * static_cast<double>(ref_associations.at(assoc_ref.first).unique_assign_reads)))
+                    //{
+                        explained_refs.insert(std::move(std::make_pair(ref.first, assoc_ref.first)));
+                    //}
+                }
+            }
+            // use associated ref as explained ref if it has more uniquely mapping reads and overall more mapped reads
+            else
+            {
+                 // if more than 95% of ref's mapped reads also map to current associated ref
+                if (ref_associations.at(assoc_ref.first).all_assigned_reads - ref_associations.at(assoc_ref.first).associated_species.at(ref.first) < static_cast<uint64_t>(0.05 * static_cast<double>(ref_associations.at(assoc_ref.first).all_assigned_reads)))
+                {
+                    // if the number of uniquely mapped reads of ref is less then 5% the number of uniquely mapped reads of associated ref
+                    //if (ref.second.unique_assign_reads < static_cast<uint64_t>(0.05 * static_cast<double>(ref_associations.at(assoc_ref.first).unique_assign_reads)))
+                    //{
+                        explained_refs.insert(std::move(std::make_pair(assoc_ref.first, ref.first)));
                 }
             }
         }
     }
-
+   
     bool found = true;
+    
     while (found)
     {
         found = false;
         for (auto & exp_ref : explained_refs)
         {
-            if (explained_refs.contains(exp_ref.second))
+            if (explained_refs.contains(exp_ref.second) && exp_ref.first.compare(explained_refs.at(exp_ref.second)) != 0)
             {
                 exp_ref.second = explained_refs.at(exp_ref.second);
                 found = true;
@@ -334,13 +398,15 @@ std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std:
 
     }
 
+    
     // iterate over search results and filter results of ambiguous mappings
-    // reassign unique mappings of refs explained by another ref
+    // reassign unique mappings of refs explained by another ref => TODO: this should not be done, keep unique mappings
+    // in such cases, 
     for (auto & pair : search_results)
     {
         if (pair.second.size() == 0) continue;
-        if (pair.second.size() == 1)
-        {
+        if (pair.second.size() == 1) continue;
+/*        {
             // if unique mapping is explained by another ref
             if (explained_refs.contains(pair.second.at(0).accession_id))
             {
@@ -348,8 +414,9 @@ std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std:
                 pair.second.at(0).ref_len = taxa_lengths.at(pair.second.at(0).accession_id);
             }
         }
-        else
-        {
+*/
+//        else
+//        {
             // collect all references assigned to that read
             std::set<std::string> acc_ids{};
             for (auto & res : pair.second)
@@ -380,7 +447,7 @@ std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std:
             }
 
 
-        }
+//        }
     }
 
     std::map<std::string, size_t>::iterator it = taxa_lengths.begin();
@@ -506,7 +573,7 @@ std::map<std::string, taxonomy::Profile_Output> calculate_higher_rank_abundances
     {
         //std::cout << sp.first << "\t" << sp.second << std::endl;
         if (sp.second == 0) continue;
-        std::cout << std::string(sp.first) << "\t" << sp.second << std::endl;
+        //std::cout << std::string(sp.first) << "\t" << sp.second << std::endl;
         if (sp.first.compare("unclassified") == 0)
         {
             taxonomy::Profile_Output profile{};
@@ -515,7 +582,7 @@ std::map<std::string, taxonomy::Profile_Output> calculate_higher_rank_abundances
             rank_profiles.insert(std::move(std::pair(sp.first, std::move(profile))));
             continue;
         }
-        std::cout << sp.first << "\t" << sp.second << std::endl;
+        //std::cout << sp.first << "\t" << sp.second << std::endl;
         std::vector<std::string> taxid_path = str_split(taxpath.at(sp.first).first,';');
         std::vector<std::string> taxname_path = str_split(taxpath.at(sp.first).second,';');
         for (size_t index = 0; index < taxid_path.size();++index)
@@ -573,45 +640,58 @@ std::map<std::string, double> expectation_maximization(size_t iterations,
     std::cout << "Initialize prior probabilities ..." << std::flush;
     std::map<std::string, double> log_priors = initialize_prior_log_probabilities(taxa);
     std::cout << "done" << std::endl;
-    std::cout << "Calculate Log Likelihoods ..." << std::flush;
-    std::map<std::string, std::map<std::string, double>> log_likelihoods = calculate_log_likelihoods(search_results);
-    std::cout << "done" << std::endl;
-    std::cout << "Calculate Log Likelihoods" << std::endl << std::flush;
     double cond_log_likelihood = -__DBL_MAX__;
     size_t iter_step = 0;
     double unclassified_abundance{0.0};
     while(iter_step < iterations)
     {
         std::cout << "Starting EM iteration " << iter_step << std::endl << std::flush;
+        std::cout << "Calculate Log Likelihoods ..." << std::flush;
+        std::map<std::string, std::map<std::string, double>> log_likelihoods = calculate_log_likelihoods(search_results);
+        std::cout << "done" << std::endl;
         double new_cond_log_likelihood = 0;
         profile_results.clear();
         for (auto & read : search_results)
         {
             if (read.second.size() == 0) continue;
             double max_post = -__DBL_MAX__;
+            double min_post = __DBL_MAX__;
             std::vector<taxonomy::Search_Result> best_match{};
-            for (auto &res : read.second)
+            std::vector<taxonomy::Search_Result>::iterator worst_match{};
+            std::vector<taxonomy::Search_Result>::iterator it = read.second.begin();
+            // iterate over search results
+            while (it != read.second.end())
             {   
 
-                if (read.second.at(0).accession_id.compare("-") == 0)
+                if ((*it).accession_id.compare("-") == 0)
                 {
-                    best_match.emplace_back(res);
-                    break;
+                    if (read.second.size() == 1)
+                    {
+                        best_match.emplace_back((*it));
+                        break;
+                    }
+                    else
+                    {
+                        worst_match = it;
+                        it++;
+                    }
                 }
 
                 double post = 0.0;
                 if (log_likelihoods.contains(read.first) && 
-                    log_likelihoods.at(read.first).contains(res.accession_id) &&
-                    log_priors.contains(res.accession_id))
+                    log_likelihoods.at(read.first).contains((*it).accession_id) &&
+                    log_priors.contains((*it).accession_id))
                 {
-                    post = log_likelihoods.at(read.first).at(res.accession_id) + log_priors.at(res.accession_id);
+                    post = log_likelihoods.at(read.first).at((*it).accession_id) + log_priors.at((*it).accession_id);
                 }
                 else
                 {
+                    it++;
                     continue;
                 }
 
                 new_cond_log_likelihood += post;
+                // update best match based on best posterior probability
                 if (post >= max_post)
                 {
                     if (post > max_post)
@@ -619,11 +699,20 @@ std::map<std::string, double> expectation_maximization(size_t iterations,
                         max_post = post;
                         best_match.clear();
                     }
-                    best_match.emplace_back(res);
+                    best_match.emplace_back((*it));
                 }
+                // update worst match based on worst posterior probability
+                if (post < min_post)
+                {
+                    worst_match = it;
+                }
+                it++;
 
             }
             profile_results.insert(std::move(std::make_pair(read.first, std::move(best_match))));
+            // remove reference match with worst posterior probability in each iteration until convergence
+            if (read.second.size() > 1)
+                read.second.erase(worst_match);
         }
         // update referencs abundances (priors)
         std::cout << "Update prior probabilities ..." << std::flush;
@@ -722,13 +811,13 @@ void tax_profile(taxor::profile::configuration& config)
     std::map<std::string,std::pair<uint64_t,uint64_t>> map_counts = count_unique_ambiguous_mappings_per_reference(search_results);
     // at least 3 uniquely mapped reads & at least 10% of all mappings unique
     // TODO: may use different parameters for Illumina data
-    remove_low_confidence_references(search_results, map_counts, 3, 0.001);
+    remove_low_confidence_references(search_results, map_counts, 3, 0.01);
     map_counts.clear();
    
     std::cout << "done" << std::endl;
     std::cout << "Filter associated references..." << std::flush;
 
-    std::map<std::string, size_t> found_taxa = filter_ref_associations(search_results);
+    std::map<std::string, size_t> found_taxa = filter_ref_associations(search_results, config.threads);
    
     std::cout << "done" << std::endl;
     std::cout << "Start EM algorithm..." << std::flush;
@@ -739,7 +828,7 @@ void tax_profile(taxor::profile::configuration& config)
 
     std::cout << "done" << std::endl;
     std::cout << "Calculate higher rank sequence abundances.." << std::flush;
-    std::cout<< config.threshold << std::endl;
+    //std::cout<< config.threshold << std::endl;
     for (auto & t: tax_abundances)
     {
         if (t.second < config.threshold)

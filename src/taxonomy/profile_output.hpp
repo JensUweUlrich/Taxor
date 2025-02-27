@@ -83,14 +83,14 @@ void write_biobox_binning_file(std::string &output_file,
     std::ofstream fout{output_file};
     fout << "@SampleID:" << sample_id << "\n";
     fout << "@Version:0.10.0\n";
-    fout << "@@SEQUENCEID\tACCESSIONID\n";
+    fout << "@@SEQUENCEID\tTAXID\n";
 
     for (auto & read : binning_results)
     {
         if (read.second.size() == 0)
             fout << read.first << "\t-\n";
         else
-            fout << read.first << "\t" << read.second.at(0).accession_id << "\n";
+            fout << read.first << "\t" << read.second.at(0).tax_id << "\n";
     }
 
 

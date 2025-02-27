@@ -17,7 +17,7 @@ public:
     std::string file_stem;
     std::string taxnames_string;
     std::string taxid_string;
-    uint16_t user_bin;
+    uint64_t user_bin;
     uint64_t seq_len;
 
 

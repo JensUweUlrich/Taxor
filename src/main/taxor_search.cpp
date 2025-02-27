@@ -170,7 +170,12 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         hixf::threshold_parameters param = arguments.make_threshold_parameters();
         thresholder = hixf::threshold::threshold{param};
         for (size_t i = 0; i < index.species().size(); ++i)
+        {
             user_bin_index.emplace(std::make_pair(index.species().at(i).user_bin, i));
+            //if (index.species().at(i).taxid.compare("160232") == 0)
+            //            std::cerr << index.species().at(user_bin_index[count.first]).organism_name << "\t" << count.first << "\t" << count.second << std::endl;
+
+        }
     };
     auto cereal_handle = std::async(std::launch::async, cereal_worker);
     seqan3::sequence_file_input<hixf::dna4_traits, seqan3::fields<seqan3::field::id, seqan3::field::seq>> fin{
