@@ -828,29 +828,19 @@ void tax_profile(taxor::profile::configuration& config)
 
     std::cout << "done" << std::endl;
     std::cout << "Calculate higher rank sequence abundances.." << std::flush;
-    //std::cout<< config.threshold << std::endl;
-    for (auto & t: tax_abundances)
-    {
-        if (t.second < config.threshold)
-            t.second = 0.0;
-    }
+    
     std::map<std::string, taxonomy::Profile_Output> rank_profiles = calculate_higher_rank_abundances(tax_abundances,taxpath);
     std::cout << "done" << std::endl;
     std::cout << "Write sequence abundances..." << std::flush;
 
-    taxonomy::write_sequence_abundance_file(config.sequence_abundance_file, rank_profiles, config.sample_id);
+    taxonomy::write_sequence_abundance_file(config.sequence_abundance_file, rank_profiles, config.sample_id, config.threshold);
 
     std::cout << "done" << std::endl;
     std::cout << "Calculate genomic abundances ..." << std::flush;
 
     calculate_relative_genomic_abundances(tax_abundances, found_taxa, profile_results);
 
-    for (auto & t: tax_abundances)
-    {
-        if (t.second < config.threshold)
-            t.second = 0.0;
-    }
-
+    
     std::cout << "done" << std::endl;
     std::cout << "Write remaining output files ..." << std::flush;
 
@@ -858,7 +848,7 @@ void tax_profile(taxor::profile::configuration& config)
     rank_profiles.clear();
     rank_profiles = calculate_higher_rank_abundances(tax_abundances,taxpath);
     
-    taxonomy::write_biobox_profiling_file(config.report_file, rank_profiles, config.sample_id);
+    taxonomy::write_biobox_profiling_file(config.report_file, rank_profiles, config.sample_id, config.threshold);
     taxonomy::write_biobox_binning_file(config.binning_file, profile_results, config.sample_id);
     std::cout << "done" << std::endl;
 }

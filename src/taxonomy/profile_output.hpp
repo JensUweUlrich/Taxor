@@ -24,8 +24,8 @@ std::string format(float f, int digits) {
 
 void write_biobox_profiling_file(std::string &output_file, 
                                  std::map<std::string, Profile_Output> &tax_rank_abundances, 
-                                 std::string &sample_id)
-                                 //std::string &taxonomy_id)
+                                 std::string &sample_id,
+                                 double &threshold)
 {
     std::vector<std::string> tax_ranks{"superkingdom","phylum", "class", "order","family", "genus", "species"};
 
@@ -40,7 +40,7 @@ void write_biobox_profiling_file(std::string &output_file,
     {
         for (auto & rank : tax_rank_abundances)
         {
-            if (rank.second.rank.compare(tr) == 0)
+            if (rank.second.rank.compare(tr) == 0 && rank.second.percentage > threshold)
                 fout << rank.second.taxid << "\t" << rank.second.rank << "\t" << rank.second.taxid_string << "\t"
                         << rank.second.taxname_string << "\t" << format(rank.second.percentage*100,6) << "\n";
         }
@@ -50,8 +50,8 @@ void write_biobox_profiling_file(std::string &output_file,
 
 void write_sequence_abundance_file(std::string &output_file, 
                                    std::map<std::string, Profile_Output> &tax_rank_abundances, 
-                                   std::string &sample_id)
-                                   //std::string &taxonomy_id)
+                                   std::string &sample_id,
+                                   double &threshold)
 {
     std::vector<std::string> tax_ranks{"superkingdom","phylum", "class", "order","family", "genus", "species"};
 
@@ -68,7 +68,7 @@ void write_sequence_abundance_file(std::string &output_file,
         for (auto & rank : tax_rank_abundances)
         {
             //std::cout << tr << "\t" << rank.second.taxid << std::endl;
-            if (rank.second.rank.compare(tr) == 0)
+            if (rank.second.rank.compare(tr) == 0 && rank.second.percentage > threshold)
                 fout << rank.second.taxid << "\t" << rank.second.rank << "\t" << rank.second.taxid_string << "\t"
                         << rank.second.taxname_string << "\t" << format(rank.second.percentage*100,6) << "\n";
         }
