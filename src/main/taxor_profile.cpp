@@ -585,9 +585,11 @@ std::map<std::string, taxonomy::Profile_Output> calculate_higher_rank_abundances
         //std::cout << sp.first << "\t" << sp.second << std::endl;
         std::vector<std::string> taxid_path = str_split(taxpath.at(sp.first).first,';');
         std::vector<std::string> taxname_path = str_split(taxpath.at(sp.first).second,';');
+        
         for (size_t index = 0; index < taxid_path.size();++index)
         {
-
+            
+            if (taxid_path[index].size() < 1) continue;
             if (!rank_profiles.contains(taxid_path[index]))
             {
                 taxonomy::Profile_Output profile{};
@@ -599,7 +601,9 @@ std::map<std::string, taxonomy::Profile_Output> calculate_higher_rank_abundances
                     profile.taxid_string += "|";
                     profile.taxid_string += taxid_path[index2];
                     profile.taxname_string += "|";
-                    profile.taxname_string += taxname_path[index2].substr(3);
+                    if (taxname_path[index2].size() > 1)
+                        profile.taxname_string += taxname_path[index2].substr(3);
+
                 }
 
                 profile.percentage = 0.0;
