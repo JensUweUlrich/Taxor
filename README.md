@@ -48,7 +48,6 @@ Users can easily build custom databases as described below or use the following 
 |Kingdom                               |Source                 | Parameters  | Size    | Link         | MD5 Hash |
 |:-------------------------------------|:----------------------|:------------|:--------|:-------------|:---------|
 | Viruses                              | Genbank Release 258   | k=22, s=12  | 373 MB  | [download](https://www.dropbox.com/scl/fi/9jqa2lroshg17u84f9zhj/genbank-viral-k22-s12.hixf?rlkey=jw2i3nxrn1jk5vctwtu3vb4rs&dl=0) | 0e8edd19a6314450f88f556dcf6b7c95 |
-| Bacteria, Archaea                    | GTDB Release 220      | k=22, s=12  | 113 GB  | [download](https://taxor-idx.s3.amazonaws.com/gtdb_k22-s12.hixf) | 122817bbfebf04f2be7fc1c796a0f9f0 |
 | Archaea, Bacteria, Fungi, Viruses    | RefSeq Release 216    | k=22, s=12  | 9.9 GB  | [download](https://www.dropbox.com/scl/fi/k6463vkkapt832g43joco/refseq-abfv-k22-s12.hixf?rlkey=zhudv2l9talt3rurni8r8yc1s&dl=0) | 768ee0320dcf41f5b15efafa028ba836 |
 
 ## <a name="commands"></a>Commands
