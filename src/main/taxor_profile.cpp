@@ -8,6 +8,7 @@
 #include "taxor_profile_configuration.hpp"
 #include "taxor_profile.hpp"
 #include "search_results.hpp"
+#include "parallel_util.hpp"
 #include <taxutil.hpp>
 #include <profile_output.hpp>
 
@@ -60,6 +61,12 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::profile::c
                       "The number of steps for the expectation maximization (EM) algorithm (default: 100).",
                       seqan3::option_spec::standard,
                       seqan3::arithmetic_range_validator{static_cast<size_t>(1), static_cast<size_t>(1000)});
+
+    parser.add_option(config.threads,
+                      '\0', "threads",
+                      "The number of threads to use.",
+                      seqan3::option_spec::standard,
+                      seqan3::arithmetic_range_validator{static_cast<size_t>(1), static_cast<size_t>(32)});
 
 
     parser.add_flag(config.output_verbose_statistics,
@@ -163,35 +170,62 @@ std::map<std::string, std::vector<taxonomy::Search_Result>> parse_search_results
 }
 
 
-ankerl::unordered_dense::set<std::string> get_refs_with_uniquely_mapping_reads(std::map<std::string, std::vector<taxonomy::Search_Result>> &search_results)
+ankerl::unordered_dense::set<std::string> get_refs_with_uniquely_mapping_reads(std::map<std::string, std::vector<taxonomy::Search_Result>> &search_results,
+                                                                                uint8_t threads = 1u)
 {
-    ankerl::unordered_dense::set<std::string> ref_unique_mappings{};
-    for (auto & pair : search_results)
+    auto entries = taxor::util::to_pointer_vector(search_results);
+    std::vector<ankerl::unordered_dense::set<std::string>> partials(std::max<size_t>(1, threads));
+
+    auto worker = [&](size_t thread_index, size_t start, size_t end)
     {
-        if (pair.second.size() == 1)
+        auto & local = partials[thread_index];
+        for (size_t idx = start; idx < end; ++idx)
         {
-            if (pair.second.at(0).accession_id.compare("-") != 0)
+            auto & pair = *entries[idx];
+            if (pair.second.size() == 1)
             {
-                ref_unique_mappings.insert(pair.second.at(0).accession_id);
+                if (pair.second.at(0).accession_id.compare("-") != 0)
+                {
+                    local.insert(pair.second.at(0).accession_id);
+                }
             }
         }
-    }
+    };
+
+    taxor::util::parallel_for_indexed(worker, entries.size(), threads);
+
+    // set union across partials; order-independent, so a plain sequential merge is exact
+    ankerl::unordered_dense::set<std::string> ref_unique_mappings{};
+    for (auto & local : partials)
+        for (auto & acc : local)
+            ref_unique_mappings.insert(acc);
+
     return std::move(ref_unique_mappings);
 }
 
 
 /**
  *  Remove all ambiguous read-to-reference assignments where the reference has no unique mapping
+ *
+ *  Each map entry (one read's candidate list) is mutated independently of every other
+ *  entry, and only reads (never mutates) the shared ref_unique_mappings set, so this is
+ *  safe to split across threads with no merge step required.
 */
 void remove_matches_to_nonunique_refs(std::map<std::string, std::vector<taxonomy::Search_Result>>& search_results,
-                                      ankerl::unordered_dense::set<std::string>& ref_unique_mappings)
+                                      ankerl::unordered_dense::set<std::string>& ref_unique_mappings,
+                                      uint8_t threads = 1u)
 {
-    std::vector<taxonomy::Search_Result>::iterator search_iterator;
-    for (auto & pair : search_results)
+    auto entries = taxor::util::to_pointer_vector(search_results);
+
+    auto worker = [&](size_t /*thread_index*/, size_t start, size_t end)
     {
+    std::vector<taxonomy::Search_Result>::iterator search_iterator;
+    for (size_t idx = start; idx < end; ++idx)
+    {
+        auto & pair = *entries[idx];
         if (pair.second.size() > 1)
-        {   
-            
+        {
+
             // first check whether read maps to at least one reference with a uniquely mapping read
             bool unique = false;
             uint64_t query_len = 0;
@@ -226,38 +260,63 @@ void remove_matches_to_nonunique_refs(std::map<std::string, std::vector<taxonomy
             }
         }
     }
+    };
+
+    taxor::util::parallel_for_indexed(worker, entries.size(), threads);
 }
 
 
 std::map<std::string,std::pair<uint64_t,uint64_t>> count_unique_ambiguous_mappings_per_reference(
-                                std::map<std::string, std::vector<taxonomy::Search_Result>>& search_results)
+                                std::map<std::string, std::vector<taxonomy::Search_Result>>& search_results,
+                                uint8_t threads = 1u)
 {
     // <taxid, <unique,ambiguous>>
-    std::map<std::string,std::pair<uint64_t,uint64_t>> map_counts{};
-    for (auto & pair : search_results)
+    auto entries = taxor::util::to_pointer_vector(search_results);
+    std::vector<std::map<std::string,std::pair<uint64_t,uint64_t>>> partials(std::max<size_t>(1, threads));
+
+    auto worker = [&](size_t thread_index, size_t start, size_t end)
     {
-        if (pair.second.size() == 1)
+        auto & map_counts = partials[thread_index];
+        for (size_t idx = start; idx < end; ++idx)
         {
-            if (pair.second.at(0).accession_id.compare("-") != 0)
+            auto & pair = *entries[idx];
+            if (pair.second.size() == 1)
             {
-                if (!map_counts.contains(pair.second.at(0).accession_id))
+                if (pair.second.at(0).accession_id.compare("-") != 0)
                 {
-                    map_counts.insert(std::move(std::make_pair(pair.second.at(0).accession_id, std::move(std::make_pair(0,0)))));
+                    if (!map_counts.contains(pair.second.at(0).accession_id))
+                    {
+                        map_counts.insert(std::move(std::make_pair(pair.second.at(0).accession_id, std::move(std::make_pair(0,0)))));
+                    }
+                    map_counts.at(pair.second.at(0).accession_id).first += 1;
                 }
-                map_counts.at(pair.second.at(0).accession_id).first += 1;
+            }
+            else
+            {
+                for (auto & res : pair.second)
+                {
+                    if (res.accession_id.compare("-") == 0) continue;
+                    if (!map_counts.contains(res.accession_id))
+                    {
+                        map_counts.insert(std::move(std::make_pair(res.accession_id, std::move(std::make_pair(0,0)))));
+                    }
+                    map_counts.at(res.accession_id).second += 1;
+                }
             }
         }
-        else
+    };
+
+    taxor::util::parallel_for_indexed(worker, entries.size(), threads);
+
+    // additive reduction: commutative/associative, so merge order doesn't affect the result
+    std::map<std::string,std::pair<uint64_t,uint64_t>> map_counts{};
+    for (auto & partial : partials)
+    {
+        for (auto & entry : partial)
         {
-            for (auto & res : pair.second)
-            {
-                if (res.accession_id.compare("-") == 0) continue;
-                if (!map_counts.contains(res.accession_id))
-                {
-                    map_counts.insert(std::move(std::make_pair(res.accession_id, std::move(std::make_pair(0,0)))));
-                }
-                map_counts.at(res.accession_id).second += 1;
-            }
+            auto & dst = map_counts[entry.first];
+            dst.first += entry.second.first;
+            dst.second += entry.second.second;
         }
     }
 
@@ -267,16 +326,17 @@ std::map<std::string,std::pair<uint64_t,uint64_t>> count_unique_ambiguous_mappin
 void remove_low_confidence_references(std::map<std::string, std::vector<taxonomy::Search_Result>>& search_results,
                                       std::map<std::string,std::pair<uint64_t,uint64_t>>& map_counts,
                                       uint8_t min_unique_mappings,
-                                      float min_fraction_unique)
+                                      float min_fraction_unique,
+                                      uint8_t threads = 1u)
 {
     ankerl::unordered_dense::set<std::string> accepted_refs{};
     for (auto & ref : map_counts)
-    {   
+    {
         if (ref.second.first >= min_unique_mappings &&
                 static_cast<float>(ref.second.first) / static_cast<float>(ref.second.first + ref.second.second) >= min_fraction_unique)
             accepted_refs.insert(ref.first);
     }
-    remove_matches_to_nonunique_refs(search_results, accepted_refs);
+    remove_matches_to_nonunique_refs(search_results, accepted_refs, threads);
 }
 
 
@@ -286,69 +346,118 @@ void remove_low_confidence_references(std::map<std::string, std::vector<taxonomy
 */
 std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std::vector<taxonomy::Search_Result>> &search_results, uint8_t threads)
 {
-    
+
     // taxid, length
     std::map<std::string, size_t> taxa_lengths{};
     std::map<std::string, Ref_Map_Info> ref_associations{};
 
-    for (auto & pair : search_results)
+    // Build ref_associations/taxa_lengths from search_results. Each read is processed
+    // independently, but different reads can update the SAME reference's Ref_Map_Info
+    // (and taxa_lengths entry), so this is a real reduction: every thread accumulates
+    // into its own partial maps, which are then merged (by addition) sequentially below.
     {
-        if (pair.second.size() == 0) continue;
-        if (pair.second.size() == 1)
+        auto entries = taxor::util::to_pointer_vector(search_results);
+        std::vector<std::map<std::string, size_t>> partial_lengths(std::max<size_t>(1, threads));
+        std::vector<std::map<std::string, Ref_Map_Info>> partial_assoc(std::max<size_t>(1, threads));
+
+        auto worker = [&](size_t thread_index, size_t start, size_t end)
         {
-            // if there is one unique mapping between this read and a reference
-            if (pair.second.at(0).accession_id.compare("-") != 0)
+            auto & taxa_lengths_local = partial_lengths[thread_index];
+            auto & ref_associations_local = partial_assoc[thread_index];
+
+            for (size_t idx = start; idx < end; ++idx)
             {
-                if (!ref_associations.contains(pair.second.at(0).accession_id))
-                    ref_associations.insert(std::move(std::make_pair(pair.second.at(0).accession_id, Ref_Map_Info{})));
-
-                // increment the number of uniquely mapped reads by 1
-                ref_associations.at(pair.second.at(0).accession_id).unique_assign_reads += 1;
-                // increment the number of all mapped reads by 1
-                ref_associations.at(pair.second.at(0).accession_id).all_assigned_reads += 1;
-
-                if (!taxa_lengths.contains(pair.second.at(0).accession_id))
-                    taxa_lengths.insert(std::move(std::make_pair(pair.second.at(0).accession_id, pair.second.at(0).ref_len)));
-            }
-        }
-        else
-        {
-            // collect all references assigned to that read
-            std::vector<std::string> acc_ids{};
-            for (auto & res : pair.second)
-            {
-                if (res.accession_id.compare("-") == 0) continue;
-                if (!ref_associations.contains(res.accession_id))
-                    ref_associations.insert(std::move(std::make_pair(res.accession_id, Ref_Map_Info{})));
-
-                acc_ids.emplace_back(res.accession_id);
-                // increment the number of all mapped reads by 1
-                ref_associations.at(res.accession_id).all_assigned_reads += 1;
-
-                if (!taxa_lengths.contains(res.accession_id))
-                    taxa_lengths.insert(std::move(std::make_pair(res.accession_id, res.ref_len)));
-            }
-
-            // iterate over all references assigned with that read
-            // (iterate by reference: acc_ids can be large for reads with many ambiguous
-            // matches, and this loop is already O(k^2) per read, so avoid an extra string
-            // copy of every element on top of that)
-            for (std::string const & acc_id1 : acc_ids)
-            {
-                Ref_Map_Info & info1 = ref_associations.at(acc_id1);
-                for (std::string const & acc_id2 : acc_ids)
+                auto & pair = *entries[idx];
+                if (pair.second.size() == 0) continue;
+                if (pair.second.size() == 1)
                 {
-                    if (acc_id1.compare(acc_id2) == 0) continue;
+                    // if there is one unique mapping between this read and a reference
+                    if (pair.second.at(0).accession_id.compare("-") != 0)
+                    {
+                        if (!ref_associations_local.contains(pair.second.at(0).accession_id))
+                            ref_associations_local.insert(std::move(std::make_pair(pair.second.at(0).accession_id, Ref_Map_Info{})));
 
-                    // increment the number of shared reads between ref1 and ref2
-                    // (single lookup instead of contains()+insert()+at() against the same key)
-                    ++info1.associated_species[acc_id2];
+                        // increment the number of uniquely mapped reads by 1
+                        ref_associations_local.at(pair.second.at(0).accession_id).unique_assign_reads += 1;
+                        // increment the number of all mapped reads by 1
+                        ref_associations_local.at(pair.second.at(0).accession_id).all_assigned_reads += 1;
+
+                        if (!taxa_lengths_local.contains(pair.second.at(0).accession_id))
+                            taxa_lengths_local.insert(std::move(std::make_pair(pair.second.at(0).accession_id, pair.second.at(0).ref_len)));
+                    }
+                }
+                else
+                {
+                    // collect all references assigned to that read
+                    std::vector<std::string> acc_ids{};
+                    for (auto & res : pair.second)
+                    {
+                        if (res.accession_id.compare("-") == 0) continue;
+                        if (!ref_associations_local.contains(res.accession_id))
+                            ref_associations_local.insert(std::move(std::make_pair(res.accession_id, Ref_Map_Info{})));
+
+                        acc_ids.emplace_back(res.accession_id);
+                        // increment the number of all mapped reads by 1
+                        ref_associations_local.at(res.accession_id).all_assigned_reads += 1;
+
+                        if (!taxa_lengths_local.contains(res.accession_id))
+                            taxa_lengths_local.insert(std::move(std::make_pair(res.accession_id, res.ref_len)));
+                    }
+
+                    // iterate over all references assigned with that read
+                    // (iterate by reference: acc_ids can be large for reads with many ambiguous
+                    // matches, and this loop is already O(k^2) per read, so avoid an extra string
+                    // copy of every element on top of that)
+                    for (std::string const & acc_id1 : acc_ids)
+                    {
+                        Ref_Map_Info & info1 = ref_associations_local.at(acc_id1);
+                        for (std::string const & acc_id2 : acc_ids)
+                        {
+                            if (acc_id1.compare(acc_id2) == 0) continue;
+
+                            // increment the number of shared reads between ref1 and ref2
+                            // (single lookup instead of contains()+insert()+at() against the same key)
+                            ++info1.associated_species[acc_id2];
+                        }
+                    }
+
                 }
             }
+        };
 
+        taxor::util::parallel_for_indexed(worker, entries.size(), threads);
+
+        // Merge: all operations below are addition (commutative/associative), so the
+        // final numeric result does not depend on partition boundaries or merge order.
+        for (auto & partial : partial_lengths)
+        {
+            for (auto & entry : partial)
+            {
+                auto it = taxa_lengths.find(entry.first);
+                if (it == taxa_lengths.end())
+                    taxa_lengths.insert(entry);
+                // taxa_lengths is conceptually "first value wins" (ref_len is a property of
+                // the reference genome, not of the read), so a differing length for the same
+                // accession id indicates malformed/inconsistent input - surface it loudly
+                // instead of silently picking whichever partition happened to run first.
+                else if (it->second != entry.second)
+                    std::cerr << "[TAXOR PROFILE WARNING] inconsistent reference length for accession "
+                              << entry.first << ": " << it->second << " vs " << entry.second << std::endl;
+            }
+        }
+        for (auto & partial : partial_assoc)
+        {
+            for (auto & entry : partial)
+            {
+                Ref_Map_Info & dst = ref_associations[entry.first];
+                dst.unique_assign_reads += entry.second.unique_assign_reads;
+                dst.all_assigned_reads += entry.second.all_assigned_reads;
+                for (auto & assoc : entry.second.associated_species)
+                    dst.associated_species[assoc.first] += assoc.second;
+            }
         }
     }
-   
+
     // first is explained by second => exchange first with second
     std::map<std::string, std::string> explained_refs{};
     // iterate over all found references
@@ -415,11 +524,20 @@ std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std:
     
     // iterate over search results and filter results of ambiguous mappings
     // reassign unique mappings of refs explained by another ref => TODO: this should not be done, keep unique mappings
-    // in such cases, 
-    for (auto & pair : search_results)
+    // in such cases,
+    // Independent per read: each thread only mutates its own read's vector, and
+    // explained_refs/taxa_lengths are both fully built and read-only from here on, so
+    // this is safe to split across threads with no merge step required.
     {
-        if (pair.second.size() == 0) continue;
-        if (pair.second.size() == 1) continue;
+        auto entries = taxor::util::to_pointer_vector(search_results);
+
+        auto worker = [&](size_t /*thread_index*/, size_t start, size_t end)
+        {
+            for (size_t idx = start; idx < end; ++idx)
+            {
+                auto & pair = *entries[idx];
+                if (pair.second.size() == 0) continue;
+                if (pair.second.size() == 1) continue;
 /*        {
             // if unique mapping is explained by another ref
             if (explained_refs.contains(pair.second.at(0).accession_id))
@@ -431,37 +549,39 @@ std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std:
 */
 //        else
 //        {
-            // collect all references assigned to that read
-            std::set<std::string> acc_ids{};
-            for (auto & res : pair.second)
-                acc_ids.emplace(res.accession_id);   
-            
-            std::vector<taxonomy::Search_Result>::iterator it = pair.second.begin();
-            // iterate over search results
-            while (it != pair.second.end())
-            {
-                // if accession id is explained by another reference
-                if (explained_refs.contains((*it).accession_id))
+                // collect all references assigned to that read
+                std::set<std::string> acc_ids{};
+                for (auto & res : pair.second)
+                    acc_ids.emplace(res.accession_id);
+
+                std::vector<taxonomy::Search_Result>::iterator it = pair.second.begin();
+                // iterate over search results
+                while (it != pair.second.end())
                 {
-                    // if there is another mapping of this read to the reference that explains current accession id
-                    // remove this match
-                    if (acc_ids.contains(explained_refs.at((*it).accession_id)))
+                    // if accession id is explained by another reference
+                    if (explained_refs.contains((*it).accession_id))
                     {
-                        it = pair.second.erase(it);
-                        continue;
+                        // if there is another mapping of this read to the reference that explains current accession id
+                        // remove this match
+                        if (acc_ids.contains(explained_refs.at((*it).accession_id)))
+                        {
+                            it = pair.second.erase(it);
+                            continue;
+                        }
+                        // reassign otherwise
+                        else
+                        {
+                            (*it).accession_id = explained_refs.at((*it).accession_id);
+                            (*it).ref_len = taxa_lengths.at((*it).accession_id);
+                        }
                     }
-                    // reassign otherwise
-                    else
-                    {
-                        (*it).accession_id = explained_refs.at((*it).accession_id);
-                        (*it).ref_len = taxa_lengths.at((*it).accession_id);
-                    }
+                    it++;
                 }
-                it++;
-            }
-
-
 //        }
+            }
+        };
+
+        taxor::util::parallel_for_indexed(worker, entries.size(), threads);
     }
 
     std::map<std::string, size_t>::iterator it = taxa_lengths.begin();
@@ -488,70 +608,114 @@ std::map<std::string, double> initialize_prior_log_probabilities(std::map<std::s
     return std::move(priors);
 }
 
-std::map<std::string, std::map<std::string, double>> calculate_log_likelihoods(std::map<std::string, std::vector<taxonomy::Search_Result>> &search_results)
+std::map<std::string, std::map<std::string, double>> calculate_log_likelihoods(std::map<std::string, std::vector<taxonomy::Search_Result>> &search_results,
+                                                                                uint8_t threads = 1u)
 {
-    std::map<std::string, std::map<std::string, double>> likelihoods{};
-    for (auto & pair : search_results)
+    // Every entry is written under its own read id (pair.first), which is unique per
+    // std::map entry by definition, so keys are provably disjoint across partitions -
+    // the merge below can never see a real conflict, no reduction logic needed.
+    auto entries = taxor::util::to_pointer_vector(search_results);
+    std::vector<std::map<std::string, std::map<std::string, double>>> partials(std::max<size_t>(1, threads));
+
+    auto worker = [&](size_t thread_index, size_t start, size_t end)
     {
-        std::map<std::string, double> read_ref_liklihoods{};
-        if (pair.second.size() == 0) continue;
-        if (pair.second.size() > 1)
+        auto & likelihoods = partials[thread_index];
+        for (size_t idx = start; idx < end; ++idx)
         {
-            // calculate sum of matchcount ratios
-            double sum_ratio{0.0};
-            for (auto & res : pair.second)
+            auto & pair = *entries[idx];
+            std::map<std::string, double> read_ref_liklihoods{};
+            if (pair.second.size() == 0) continue;
+            if (pair.second.size() > 1)
             {
-                if (res.accession_id.compare("-") == 0) continue;
-                sum_ratio += static_cast<double>(res.query_hash_match) / static_cast<double>(res.query_hash_count);
+                // calculate sum of matchcount ratios
+                double sum_ratio{0.0};
+                for (auto & res : pair.second)
+                {
+                    if (res.accession_id.compare("-") == 0) continue;
+                    sum_ratio += static_cast<double>(res.query_hash_match) / static_cast<double>(res.query_hash_count);
+                }
+
+                // calculate log likelihoods of the single matches
+                for (auto & res : pair.second)
+                {
+                    if (res.accession_id.compare("-") == 0) continue;
+                    double likeL = (log(static_cast<double>(res.query_hash_match)) - log(static_cast<double>(res.query_hash_count))) - log(sum_ratio);
+                    read_ref_liklihoods.insert(std::move(std::make_pair(res.accession_id, likeL)));
+                }
+            }
+            else
+            {
+                // if there is one unique mapping between this read and a reference
+                if (pair.second.at(0).accession_id.compare("-") != 0)
+                {
+                    read_ref_liklihoods.insert(std::move(std::make_pair(pair.second.at(0).accession_id, 0.0)));
+                }
             }
 
-            // calculate log likelihoods of the single matches
-            for (auto & res : pair.second)
-            {
-                if (res.accession_id.compare("-") == 0) continue;
-                double likeL = (log(static_cast<double>(res.query_hash_match)) - log(static_cast<double>(res.query_hash_count))) - log(sum_ratio);
-                read_ref_liklihoods.insert(std::move(std::make_pair(res.accession_id, likeL)));
-            }
+            likelihoods.insert(std::move(std::make_pair(pair.first, read_ref_liklihoods)));
         }
-        else
-        {
-            // if there is one unique mapping between this read and a reference
-            if (pair.second.at(0).accession_id.compare("-") != 0)
-            {
-                read_ref_liklihoods.insert(std::move(std::make_pair(pair.second.at(0).accession_id, 0.0)));
-            }
-        }
+    };
 
-        likelihoods.insert(std::move(std::make_pair(pair.first, read_ref_liklihoods)));
-    }
+    taxor::util::parallel_for_indexed(worker, entries.size(), threads);
+
+    std::map<std::string, std::map<std::string, double>> likelihoods{};
+    for (auto & partial : partials)
+        likelihoods.merge(partial);
 
     return std::move(likelihoods);
 }
 
 double update_log_prior_probabilities(std::map<std::string, double> &log_priors,
                                     std::map<std::string, size_t> & taxa,
-                                    std::map<std::string, std::vector<taxonomy::Search_Result>> &profile_results)
+                                    std::map<std::string, std::vector<taxonomy::Search_Result>> &profile_results,
+                                    uint8_t threads = 1u)
 {
     std::map<std::string, uint64_t> ref_nts{};
     for (auto & t : taxa)
         ref_nts.insert(std::move(std::make_pair(t.first, 0)));
 
     // for each taxon sum all lengths of matching reads
+    // Different reads can update the SAME taxon's entry in ref_nts, so this is a real
+    // reduction: each thread accumulates into its own pre-seeded partial ref_nts map
+    // (mirroring the pre-seed-from-taxa invariant .at() below relies on) plus local
+    // scalar counters, merged by integer += after joining (exact, no FP concern).
     size_t all_nts{0};
     size_t unclassified_nts{0};
     //std::cout << "Sum nts of matching reads per taxon..." << std::endl << std::flush;
-    for (auto &read : profile_results)
     {
-        if (read.second.size() == 0) continue;
-        all_nts += read.second.at(0).query_len;
-        if (read.second.at(0).accession_id.compare("-") == 0)
+        auto entries = taxor::util::to_pointer_vector(profile_results);
+        std::vector<std::map<std::string, uint64_t>> partial_ref_nts(std::max<size_t>(1, threads), ref_nts);
+        std::vector<size_t> partial_all_nts(std::max<size_t>(1, threads), 0);
+        std::vector<size_t> partial_unclassified_nts(std::max<size_t>(1, threads), 0);
+
+        auto worker = [&](size_t thread_index, size_t start, size_t end)
         {
-            unclassified_nts += read.second.at(0).query_len;
-            continue;
-        }
-        for (auto &ref : read.second)
+            auto & ref_nts_local = partial_ref_nts[thread_index];
+            for (size_t idx = start; idx < end; ++idx)
+            {
+                auto & read = *entries[idx];
+                if (read.second.size() == 0) continue;
+                partial_all_nts[thread_index] += read.second.at(0).query_len;
+                if (read.second.at(0).accession_id.compare("-") == 0)
+                {
+                    partial_unclassified_nts[thread_index] += read.second.at(0).query_len;
+                    continue;
+                }
+                for (auto &ref : read.second)
+                {
+                    ref_nts_local.at(ref.accession_id) += ref.query_len;
+                }
+            }
+        };
+
+        taxor::util::parallel_for_indexed(worker, entries.size(), threads);
+
+        for (size_t i = 0; i < partial_ref_nts.size(); ++i)
         {
-            ref_nts.at(ref.accession_id) += ref.query_len;
+            all_nts += partial_all_nts[i];
+            unclassified_nts += partial_unclassified_nts[i];
+            for (auto & t : ref_nts)
+                t.second += partial_ref_nts[i].at(t.first);
         }
     }
     std::cout << "done" << std::endl;
@@ -665,10 +829,11 @@ std::map<std::string, taxonomy::Profile_Output> calculate_higher_rank_abundances
     
 }
 
-std::map<std::string, double> expectation_maximization(size_t iterations, 
+std::map<std::string, double> expectation_maximization(size_t iterations,
                               std::map<std::string, size_t> & taxa,
                               std::map<std::string, std::vector<taxonomy::Search_Result>> &search_results,
-                              std::map<std::string, std::vector<taxonomy::Search_Result>> &profile_results)
+                              std::map<std::string, std::vector<taxonomy::Search_Result>> &profile_results,
+                              uint8_t threads = 1u)
 {
     std::cout << "started" << std::endl;
     std::cout << "Initialize prior probabilities ..." << std::flush;
@@ -677,89 +842,125 @@ std::map<std::string, double> expectation_maximization(size_t iterations,
     double cond_log_likelihood = -__DBL_MAX__;
     size_t iter_step = 0;
     double unclassified_abundance{0.0};
+
+    // Reused across iterations: search_results doesn't change size/structure between EM
+    // steps (only individual reads' candidate vectors shrink via erase(worst_match)), so
+    // the same pointer partitioning stays valid for the whole loop.
+    auto entries = taxor::util::to_pointer_vector(search_results);
+
     while(iter_step < iterations)
     {
         std::cout << "Starting EM iteration " << iter_step << std::endl << std::flush;
         std::cout << "Calculate Log Likelihoods ..." << std::flush;
-        std::map<std::string, std::map<std::string, double>> log_likelihoods = calculate_log_likelihoods(search_results);
+        std::map<std::string, std::map<std::string, double>> log_likelihoods = calculate_log_likelihoods(search_results, threads);
         std::cout << "done" << std::endl;
-        double new_cond_log_likelihood = 0;
         profile_results.clear();
-        for (auto & read : search_results)
-        {
-            if (read.second.size() == 0) continue;
-            double max_post = -__DBL_MAX__;
-            double min_post = __DBL_MAX__;
-            std::vector<taxonomy::Search_Result> best_match{};
-            // default-initialize to a valid (dereferenceable) iterator rather than a singular
-            // one: if none of the candidates below ever get scored (e.g. all of them were
-            // filtered out upstream and are missing from log_likelihoods/log_priors), the
-            // erase(worst_match) call further down must still operate on a valid iterator
-            std::vector<taxonomy::Search_Result>::iterator worst_match = read.second.begin();
-            std::vector<taxonomy::Search_Result>::iterator it = read.second.begin();
-            // iterate over search results
-            while (it != read.second.end())
-            {   
 
-                if ((*it).accession_id.compare("-") == 0)
+        // Per-read best/worst-match selection is independent (each thread only mutates
+        // its own read's vector). profile_results insertion is disjoint-key (by read id),
+        // so it's merged cheaply below. new_cond_log_likelihood is a real reduction: each
+        // thread sums into its own slot, added together after joining. Note this changes
+        // floating-point summation order vs. the sequential run (~1e-12 relative noise,
+        // expected and harmless) - but the per-read best_match/worst_match decisions
+        // below only ever depend on log_likelihoods/log_priors, never on this running
+        // total, so classification output (--binning-file) is unaffected by the reorder;
+        // only the coarse EM convergence check below sees any noise, and its threshold
+        // is far too coarse to be affected in practice.
+        std::vector<std::map<std::string, std::vector<taxonomy::Search_Result>>> partial_profile_results(std::max<size_t>(1, threads));
+        std::vector<double> partial_new_cond_log_likelihood(std::max<size_t>(1, threads), 0.0);
+
+        auto worker = [&](size_t thread_index, size_t start, size_t end)
+        {
+            auto & profile_results_local = partial_profile_results[thread_index];
+            double & new_cond_log_likelihood_local = partial_new_cond_log_likelihood[thread_index];
+
+            for (size_t idx = start; idx < end; ++idx)
+            {
+                auto & read = *entries[idx];
+                if (read.second.size() == 0) continue;
+                double max_post = -__DBL_MAX__;
+                double min_post = __DBL_MAX__;
+                std::vector<taxonomy::Search_Result> best_match{};
+                // default-initialize to a valid (dereferenceable) iterator rather than a singular
+                // one: if none of the candidates below ever get scored (e.g. all of them were
+                // filtered out upstream and are missing from log_likelihoods/log_priors), the
+                // erase(worst_match) call further down must still operate on a valid iterator
+                std::vector<taxonomy::Search_Result>::iterator worst_match = read.second.begin();
+                std::vector<taxonomy::Search_Result>::iterator it = read.second.begin();
+                // iterate over search results
+                while (it != read.second.end())
                 {
-                    if (read.second.size() == 1)
+
+                    if ((*it).accession_id.compare("-") == 0)
                     {
-                        best_match.emplace_back((*it));
-                        break;
+                        if (read.second.size() == 1)
+                        {
+                            best_match.emplace_back((*it));
+                            break;
+                        }
+                        else
+                        {
+                            // "-" is a no-match placeholder, not a real candidate taxon: mark it
+                            // as the (default) worst match and move on without falling through to
+                            // the likelihood lookup below, which would otherwise dereference `it`
+                            // after it was just advanced (UB / segfault if "-" was the last entry)
+                            worst_match = it;
+                            ++it;
+                            continue;
+                        }
+                    }
+
+                    double post = 0.0;
+                    if (log_likelihoods.contains(read.first) &&
+                        log_likelihoods.at(read.first).contains((*it).accession_id) &&
+                        log_priors.contains((*it).accession_id))
+                    {
+                        post = log_likelihoods.at(read.first).at((*it).accession_id) + log_priors.at((*it).accession_id);
                     }
                     else
                     {
-                        // "-" is a no-match placeholder, not a real candidate taxon: mark it
-                        // as the (default) worst match and move on without falling through to
-                        // the likelihood lookup below, which would otherwise dereference `it`
-                        // after it was just advanced (UB / segfault if "-" was the last entry)
-                        worst_match = it;
-                        ++it;
+                        it++;
                         continue;
                     }
-                }
 
-                double post = 0.0;
-                if (log_likelihoods.contains(read.first) && 
-                    log_likelihoods.at(read.first).contains((*it).accession_id) &&
-                    log_priors.contains((*it).accession_id))
-                {
-                    post = log_likelihoods.at(read.first).at((*it).accession_id) + log_priors.at((*it).accession_id);
-                }
-                else
-                {
-                    it++;
-                    continue;
-                }
-
-                new_cond_log_likelihood += post;
-                // update best match based on best posterior probability
-                if (post >= max_post)
-                {
-                    if (post > max_post)
+                    new_cond_log_likelihood_local += post;
+                    // update best match based on best posterior probability
+                    if (post >= max_post)
                     {
-                        max_post = post;
-                        best_match.clear();
+                        if (post > max_post)
+                        {
+                            max_post = post;
+                            best_match.clear();
+                        }
+                        best_match.emplace_back((*it));
                     }
-                    best_match.emplace_back((*it));
-                }
-                // update worst match based on worst posterior probability
-                if (post < min_post)
-                {
-                    worst_match = it;
-                }
-                it++;
+                    // update worst match based on worst posterior probability
+                    if (post < min_post)
+                    {
+                        worst_match = it;
+                    }
+                    it++;
 
+                }
+                profile_results_local.insert(std::move(std::make_pair(read.first, std::move(best_match))));
+                // remove reference match with worst posterior probability in each iteration until convergence
+                if (read.second.size() > 1)
+                    read.second.erase(worst_match);
             }
-            profile_results.insert(std::move(std::make_pair(read.first, std::move(best_match))));
-            // remove reference match with worst posterior probability in each iteration until convergence
-            if (read.second.size() > 1)
-                read.second.erase(worst_match);
+        };
+
+        taxor::util::parallel_for_indexed(worker, entries.size(), threads);
+
+        double new_cond_log_likelihood = 0.0;
+        for (size_t i = 0; i < partial_profile_results.size(); ++i)
+        {
+            profile_results.merge(partial_profile_results[i]);
+            new_cond_log_likelihood += partial_new_cond_log_likelihood[i];
         }
+
         // update referencs abundances (priors)
         std::cout << "Update prior probabilities ..." << std::flush;
-        unclassified_abundance = update_log_prior_probabilities(log_priors, taxa, profile_results);
+        unclassified_abundance = update_log_prior_probabilities(log_priors, taxa, profile_results, threads);
          std::cout << "done" << std::endl << std::flush;
         double diff = new_cond_log_likelihood - cond_log_likelihood;
         if (diff < abs(log(0.0001)))
@@ -781,7 +982,8 @@ std::map<std::string, double> expectation_maximization(size_t iterations,
 
 void calculate_relative_genomic_abundances(std::map<std::string, double> &log_priors,
                                            std::map<std::string, size_t> & taxa,
-                                           std::map<std::string, std::vector<taxonomy::Search_Result>> &profile_results)
+                                           std::map<std::string, std::vector<taxonomy::Search_Result>> &profile_results,
+                                           uint8_t threads = 1u)
 {
     log_priors.clear();
     std::map<std::string, uint64_t> ref_nts{};
@@ -792,18 +994,39 @@ void calculate_relative_genomic_abundances(std::map<std::string, double> &log_pr
     }
 
     // for each taxon sum all lengths of matching reads
-    for (auto &read : profile_results)
+    // Different reads can update the SAME taxon's entry in ref_nts, so this is a real
+    // reduction: each thread accumulates into its own pre-seeded partial ref_nts map,
+    // merged by integer += after joining (exact, no FP concern) - same pattern as
+    // update_log_prior_probabilities.
     {
-        if (read.second.size() == 0) continue;
-        if (read.second.at(0).accession_id.compare("-") == 0)
-            continue;
-        for (auto &ref : read.second)
+        auto entries = taxor::util::to_pointer_vector(profile_results);
+        std::vector<std::map<std::string, uint64_t>> partial_ref_nts(std::max<size_t>(1, threads), ref_nts);
+
+        auto worker = [&](size_t thread_index, size_t start, size_t end)
         {
-            if (ref_nts.contains(ref.accession_id))
-                ref_nts.at(ref.accession_id) += ref.query_len;
-        }
+            auto & ref_nts_local = partial_ref_nts[thread_index];
+            for (size_t idx = start; idx < end; ++idx)
+            {
+                auto & read = *entries[idx];
+                if (read.second.size() == 0) continue;
+                if (read.second.at(0).accession_id.compare("-") == 0)
+                    continue;
+                for (auto &ref : read.second)
+                {
+                    if (ref_nts_local.contains(ref.accession_id))
+                        ref_nts_local.at(ref.accession_id) += ref.query_len;
+                }
+            }
+        };
+
+        taxor::util::parallel_for_indexed(worker, entries.size(), threads);
+
+        for (auto & partial : partial_ref_nts)
+            for (auto & t : ref_nts)
+                t.second += partial.at(t.first);
     }
-    
+
+
     // calculate average depth of coverage for each taxon
     // sum of all matched read lengths divided by length of taxon reference sequence
     double sum_avg_cov{0.0};
@@ -843,18 +1066,18 @@ void tax_profile(taxor::profile::configuration& config)
     std::cout << "Remove matches to nonunique references..." << std::flush;
 
     // 1st round of reference filtering
-    ankerl::unordered_dense::set<std::string> ref_unique_mappings = get_refs_with_uniquely_mapping_reads(search_results);
-    remove_matches_to_nonunique_refs(search_results, ref_unique_mappings);
+    ankerl::unordered_dense::set<std::string> ref_unique_mappings = get_refs_with_uniquely_mapping_reads(search_results, config.threads);
+    remove_matches_to_nonunique_refs(search_results, ref_unique_mappings, config.threads);
     ref_unique_mappings.clear();
 
     std::cout << "done" << std::endl;
     std::cout << "Remove low confidence references..." << std::flush;
 
     // 2nd round of reference filtering
-    std::map<std::string,std::pair<uint64_t,uint64_t>> map_counts = count_unique_ambiguous_mappings_per_reference(search_results);
+    std::map<std::string,std::pair<uint64_t,uint64_t>> map_counts = count_unique_ambiguous_mappings_per_reference(search_results, config.threads);
     // at least 3 uniquely mapped reads & at least 10% of all mappings unique
     // TODO: may use different parameters for Illumina data
-    remove_low_confidence_references(search_results, map_counts, 3, 0.01);
+    remove_low_confidence_references(search_results, map_counts, 3, 0.01, config.threads);
     map_counts.clear();
    
     std::cout << "done" << std::endl;
@@ -867,7 +1090,7 @@ void tax_profile(taxor::profile::configuration& config)
 
     std::map<std::string, std::vector<taxonomy::Search_Result>> profile_results{};
     // returns nucleotide abundances
-    std::map<std::string, double> tax_abundances = expectation_maximization(config.em_steps, found_taxa, search_results, profile_results);
+    std::map<std::string, double> tax_abundances = expectation_maximization(config.em_steps, found_taxa, search_results, profile_results, config.threads);
 
     std::cout << "done" << std::endl;
     std::cout << "Calculate higher rank sequence abundances.." << std::flush;
@@ -881,7 +1104,7 @@ void tax_profile(taxor::profile::configuration& config)
     std::cout << "done" << std::endl;
     std::cout << "Calculate genomic abundances ..." << std::flush;
 
-    calculate_relative_genomic_abundances(tax_abundances, found_taxa, profile_results);
+    calculate_relative_genomic_abundances(tax_abundances, found_taxa, profile_results, config.threads);
 
     
     std::cout << "done" << std::endl;

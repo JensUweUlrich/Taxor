@@ -28,8 +28,10 @@ void do_parallel(algorithm_t && worker, size_t const num_records, size_t const t
         tasks.emplace_back(std::async(std::launch::async, worker, start, end));
     }
 
+    // get() (not wait()) so an exception raised in a worker propagates to the caller
+    // instead of being silently swallowed
     for (auto && task : tasks)
-        task.wait();
+        task.get();
 
     auto end = std::chrono::high_resolution_clock::now();
     compute_time += std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
