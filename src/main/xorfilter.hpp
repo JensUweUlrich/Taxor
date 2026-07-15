@@ -236,7 +236,6 @@ Status XorFilter<ItemType, FingerprintType, HashFamily>::AddAll(
                     }
                 }
                 std::cout << "Best Block: " << bestBlock << std::endl;
-                break;
                 if (tmpc[bestBlock] > 0) {
                     alonePos = applyBlock2(tmp, bestBlock, tmpc[bestBlock], t2vals, alone, alonePos);
                     tmpc[bestBlock] = 0;

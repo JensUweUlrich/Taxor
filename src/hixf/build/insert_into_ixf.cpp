@@ -29,7 +29,7 @@ void insert_into_ixf(ankerl::unordered_dense::set<size_t> & parent_hashes,
         std::ranges::copy(chunk, std::back_inserter(c));
         // adds hashes to already built bins => problematic
         bool success = ixf.add_bin_elements(bin_idx, c);
-        if (success)
+        if (!success)
             std::cout << "Building IXF not successful" << std::endl;
         for (size_t const value : chunk)
         {

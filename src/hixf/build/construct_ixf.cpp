@@ -109,7 +109,7 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
 
         // iterate over new hashes
         // add hashes of bins for newly computed hashes on that level
-        for (uint16_t bin_idx = 0; bin_idx <= current_node_data.number_of_technical_bins; ++bin_idx)
+        for (size_t bin_idx = 0; bin_idx < current_node_data.number_of_technical_bins; ++bin_idx)
         {
         
             if (bins.contains(bin_idx))

@@ -15,8 +15,8 @@ namespace taxor::taxonomy
 		{
 			
 			Species sp{};
-			sp.accession_id = line[0];
-			sp.taxid = line[1];
+			sp.accession_id = line.at(0);
+			sp.taxid = line.at(1);
 
 			sp.organism_name = "";
 			sp.taxnames_string = "";
@@ -28,8 +28,8 @@ namespace taxor::taxonomy
 				sp.taxnames_string = line[4];
 			if (line.size() > 5)
 				sp.taxid_string = line[5];
-			
-			std::size_t found = line[2].find_last_of("/\\");
+
+			std::size_t found = line.at(2).find_last_of("/\\");
 			if (found != std::string::npos)
 				sp.file_stem = line[2].substr(found+1);
 			if (sp.file_stem.compare("") == 0 || sp.file_stem.compare(" ") == 0)

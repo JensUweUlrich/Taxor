@@ -367,7 +367,7 @@ inline void count_syncmers(robin_hood::unordered_map<std::string, std::vector<st
     using traits_type = seqan3::sequence_file_input_default_traits_dna;
     using sequence_file_t = seqan3::sequence_file_input<traits_type, seqan3::fields<seqan3::field::seq>>;
 
-    size_t t_syncmer = ceil((taxor_config.kmer_size - taxor_config.syncmer_size + 1) / 2);
+    size_t t_syncmer = ceil((taxor_config.kmer_size - taxor_config.syncmer_size + 1) / 2.0);
 
     std::ofstream fout{count_config.count_filename};
 
@@ -507,7 +507,7 @@ void build_hixf(taxor::build::configuration const config,
 	args.compute_syncmer = config.use_syncmer;
     args.scaling = config.scaling;
     if (config.use_syncmer)
-        args.t_syncmer = ceil((args.kmer_size - args.syncmer_size + 1) / 2);
+        args.t_syncmer = ceil((args.kmer_size - args.syncmer_size + 1) / 2.0);
 	
     hixf::build_data data{};
    

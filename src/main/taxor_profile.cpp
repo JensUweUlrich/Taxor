@@ -251,6 +251,7 @@ std::map<std::string,std::pair<uint64_t,uint64_t>> count_unique_ambiguous_mappin
         {
             for (auto & res : pair.second)
             {
+                if (res.accession_id.compare("-") == 0) continue;
                 if (!map_counts.contains(res.accession_id))
                 {
                     map_counts.insert(std::move(std::make_pair(res.accession_id, std::move(std::make_pair(0,0)))));
@@ -316,9 +317,10 @@ std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std:
             std::vector<std::string> acc_ids{};
             for (auto & res : pair.second)
             {
+                if (res.accession_id.compare("-") == 0) continue;
                 if (!ref_associations.contains(res.accession_id))
                     ref_associations.insert(std::move(std::make_pair(res.accession_id, Ref_Map_Info{})));
-                
+
                 acc_ids.emplace_back(res.accession_id);
                 // increment the number of all mapped reads by 1
                 ref_associations.at(res.accession_id).all_assigned_reads += 1;
@@ -328,17 +330,19 @@ std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std:
             }
 
             // iterate over all references assigned with that read
-            for (std::string acc_id1 : acc_ids)
+            // (iterate by reference: acc_ids can be large for reads with many ambiguous
+            // matches, and this loop is already O(k^2) per read, so avoid an extra string
+            // copy of every element on top of that)
+            for (std::string const & acc_id1 : acc_ids)
             {
-                for (std::string acc_id2 : acc_ids)
+                Ref_Map_Info & info1 = ref_associations.at(acc_id1);
+                for (std::string const & acc_id2 : acc_ids)
                 {
                     if (acc_id1.compare(acc_id2) == 0) continue;
 
-                    if (!ref_associations.at(acc_id1).associated_species.contains(acc_id2))
-                        ref_associations.at(acc_id1).associated_species.insert(std::move(std::make_pair(acc_id2, 0)));
-
                     // increment the number of shared reads between ref1 and ref2
-                    ref_associations.at(acc_id1).associated_species.at(acc_id2) += 1;
+                    // (single lookup instead of contains()+insert()+at() against the same key)
+                    ++info1.associated_species[acc_id2];
                 }
             }
 
@@ -382,9 +386,19 @@ std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std:
         }
     }
    
+    // Flatten transitive "explained by" chains (X explained by Y, Y explained by Z => X explained by Z).
+    // The per-pair heuristic above is not guaranteed to be globally acyclic (e.g. three mutually
+    // near-identical references can end up with a 3-way cycle A->B->C->A), and a plain
+    // "repeat until no changes" loop never converges for such a cycle: two of the three nodes settle
+    // into a stable mutual pair while the third perpetually flips between them, looping forever on a
+    // single thread. Bound the number of passes: any acyclic chain fully flattens within
+    // explained_refs.size() passes, so exceeding that many passes only happens in the presence of a
+    // cycle, at which point we stop rather than spin indefinitely.
     bool found = true;
-    
-    while (found)
+    size_t const max_passes = explained_refs.size() + 1;
+    size_t pass = 0;
+
+    while (found && pass < max_passes)
     {
         found = false;
         for (auto & exp_ref : explained_refs)
@@ -395,7 +409,7 @@ std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std:
                 found = true;
             }
         }
-
+        ++pass;
     }
 
     
@@ -487,12 +501,14 @@ std::map<std::string, std::map<std::string, double>> calculate_log_likelihoods(s
             double sum_ratio{0.0};
             for (auto & res : pair.second)
             {
+                if (res.accession_id.compare("-") == 0) continue;
                 sum_ratio += static_cast<double>(res.query_hash_match) / static_cast<double>(res.query_hash_count);
             }
 
             // calculate log likelihoods of the single matches
             for (auto & res : pair.second)
             {
+                if (res.accession_id.compare("-") == 0) continue;
                 double likeL = (log(static_cast<double>(res.query_hash_match)) - log(static_cast<double>(res.query_hash_count))) - log(sum_ratio);
                 read_ref_liklihoods.insert(std::move(std::make_pair(res.accession_id, likeL)));
             }
@@ -565,6 +581,13 @@ double update_log_prior_probabilities(std::map<std::string, double> &log_priors,
 
 }
 
+// GTDB-style taxon names are prefixed with a 3-character rank marker (e.g. "p__", "s__");
+// strip it if present, otherwise return the name unchanged (handles empty/short/malformed entries)
+static std::string strip_rank_prefix(std::string const & taxname)
+{
+    return taxname.size() > 3 ? taxname.substr(3) : std::string{};
+}
+
 std::map<std::string, taxonomy::Profile_Output> calculate_higher_rank_abundances(std::map<std::string, double> &species_abundances,
                                                             std::map<std::string, std::pair<std::string, std::string>> &taxpath)
 {
@@ -585,42 +608,49 @@ std::map<std::string, taxonomy::Profile_Output> calculate_higher_rank_abundances
         //std::cout << sp.first << "\t" << sp.second << std::endl;
         std::vector<std::string> taxid_path = str_split(taxpath.at(sp.first).first,';');
         std::vector<std::string> taxname_path = str_split(taxpath.at(sp.first).second,';');
-        
+
+        // taxid_path and taxname_path are expected to be parallel (same length), but the
+        // underlying taxonomy input is user-provided and may be malformed/incomplete;
+        // guard against index-out-of-range access into taxname_path
+        auto tname = [&](size_t i) -> std::string
+        {
+            return i < taxname_path.size() ? taxname_path[i] : std::string{};
+        };
+
         for (size_t index = 0; index < taxid_path.size();++index)
         {
-            
+
             if (taxid_path[index].size() < 1) continue;
             if (!rank_profiles.contains(taxid_path[index]))
             {
                 taxonomy::Profile_Output profile{};
                 profile.taxid = taxid_path[index];
                 profile.taxid_string = taxid_path[0];
-                profile.taxname_string = taxname_path[0].substr(3);
+                profile.taxname_string = strip_rank_prefix(tname(0));
                 for (size_t index2 = 1; index2 <= index; ++index2)
                 {
                     profile.taxid_string += "|";
                     profile.taxid_string += taxid_path[index2];
                     profile.taxname_string += "|";
-                    if (taxname_path[index2].size() > 1)
-                        profile.taxname_string += taxname_path[index2].substr(3);
-
+                    profile.taxname_string += strip_rank_prefix(tname(index2));
                 }
 
                 profile.percentage = 0.0;
 
-                if (taxname_path[index].substr(0, 1).compare("s") == 0)
+                std::string const rank_prefix = tname(index).substr(0, 1);
+                if (rank_prefix.compare("s") == 0)
 				    profile.rank = "species";
-			    else if(taxname_path[index].substr(0, 1).compare("g") == 0)
+			    else if(rank_prefix.compare("g") == 0)
 					profile.rank = "genus";
-				else if(taxname_path[index].substr(0, 1).compare("f") == 0)
+				else if(rank_prefix.compare("f") == 0)
 					profile.rank = "family";
-				else if(taxname_path[index].substr(0, 1).compare("o") == 0)
+				else if(rank_prefix.compare("o") == 0)
 					profile.rank = "order";
-				else if(taxname_path[index].substr(0, 1).compare("c") == 0)
+				else if(rank_prefix.compare("c") == 0)
 					profile.rank = "class";
-				else if(taxname_path[index].substr(0, 1).compare("p") == 0)
+				else if(rank_prefix.compare("p") == 0)
 					profile.rank = "phylum";
-				else if(taxname_path[index].substr(0, 1).compare("k") == 0)
+				else if(rank_prefix.compare("k") == 0)
 					profile.rank = "superkingdom";
 
 
@@ -661,7 +691,11 @@ std::map<std::string, double> expectation_maximization(size_t iterations,
             double max_post = -__DBL_MAX__;
             double min_post = __DBL_MAX__;
             std::vector<taxonomy::Search_Result> best_match{};
-            std::vector<taxonomy::Search_Result>::iterator worst_match{};
+            // default-initialize to a valid (dereferenceable) iterator rather than a singular
+            // one: if none of the candidates below ever get scored (e.g. all of them were
+            // filtered out upstream and are missing from log_likelihoods/log_priors), the
+            // erase(worst_match) call further down must still operate on a valid iterator
+            std::vector<taxonomy::Search_Result>::iterator worst_match = read.second.begin();
             std::vector<taxonomy::Search_Result>::iterator it = read.second.begin();
             // iterate over search results
             while (it != read.second.end())
@@ -676,8 +710,13 @@ std::map<std::string, double> expectation_maximization(size_t iterations,
                     }
                     else
                     {
+                        // "-" is a no-match placeholder, not a real candidate taxon: mark it
+                        // as the (default) worst match and move on without falling through to
+                        // the likelihood lookup below, which would otherwise dereference `it`
+                        // after it was just advanced (UB / segfault if "-" was the last entry)
                         worst_match = it;
-                        it++;
+                        ++it;
+                        continue;
                     }
                 }
 
@@ -877,7 +916,15 @@ int execute(seqan3::argument_parser & parser)
         return -1;
     }
 
-    tax_profile(config);
+    try
+    {
+        tax_profile(config);
+    }
+    catch (std::exception const & e)
+    {
+        std::cerr << "[TAXOR PROFILE ERROR] " << e.what() << '\n';
+        return -1;
+    }
 
     return 0;
 }

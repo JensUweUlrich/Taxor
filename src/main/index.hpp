@@ -3,6 +3,8 @@
 
 //#include <sharg/exceptions.hpp>
 
+#include <stdexcept>
+
 #include <build/build_arguments.hpp>
 #include <build/hierarchical_interleaved_xor_filter.hpp>
 #include <build/strong_types.hpp>
@@ -112,7 +114,7 @@ public:
         compressed_ = true;
         bin_path_ = other.bin_path_;
         species_ = other.species_;
-        ixf_ = data_t{other.ibf_};
+        ixf_ = data_t{other.ixf_};
     }
 
     template <typename other_data_t>
@@ -234,12 +236,12 @@ public:
             }
             catch (std::exception const & e)
             {
-                //throw sharg::parser_error{"Cannot read index: " + std::string{e.what()}};
+                throw std::runtime_error{"Cannot read index: " + std::string{e.what()}};
             }
         }
         else
         {
-            //throw sharg::parser_error{"Unsupported index version. Check taxor upgrade."}; // GCOVR_EXCL_LINE
+            throw std::runtime_error{"Unsupported index version. Check taxor upgrade."}; // GCOVR_EXCL_LINE
         }
     }
 
@@ -274,13 +276,13 @@ public:
             // GCOVR_EXCL_START
             catch (std::exception const & e)
             {
-                //throw sharg::parser_error{"Cannot read index: " + std::string{e.what()}};
+                throw std::runtime_error{"Cannot read index: " + std::string{e.what()}};
             }
             // GCOVR_EXCL_STOP
         }
         else
         {
-            //throw sharg::parser_error{"Unsupported index version. Check taxor upgrade."}; // GCOVR_EXCL_LINE
+            throw std::runtime_error{"Unsupported index version. Check taxor upgrade."}; // GCOVR_EXCL_LINE
         }
     }
     //!\endcond

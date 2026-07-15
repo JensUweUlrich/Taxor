@@ -1,6 +1,9 @@
 
 #pragma once
 
+#include <algorithm>
+#include <cmath>
+
 #include "threshold_parameters.hpp"
 #include "kmer_model.hpp"
 #include "fracminhash_model.hpp"
@@ -50,7 +53,10 @@ public:
 
     size_t get(size_t minimiser_count, double scaling_factor) noexcept
     {
-        size_t fp_correction = minimiser_count * 0.0039;
+        if (minimiser_count == 0)
+            return 0;
+
+        double const fp_correction = minimiser_count * 0.0039;
         //std::cout << error_rate << std::endl << std::flush;
         switch (threshold_kind)
         {
@@ -62,16 +68,19 @@ public:
             case threshold_kinds::kmer_model:
             {
                 hixf::threshold::TInterval ci = hixf::threshold::calculate_nmut_kmer_CI(error_rate, (size_t) kmer_size, minimiser_count, 0.95);
-                return minimiser_count - ci.second - fp_correction;
+                double const result = static_cast<double>(minimiser_count) - static_cast<double>(ci.second) - fp_correction;
+                return static_cast<size_t>(std::max(0.0, result));
             }
             case threshold_kinds::fracminhash:
             {
-                std::pair<double, double> cont_dist_ci = hixf::threshold::calculate_containment_index_CI(error_rate, 
-                                                                                                         kmer_size, 
-                                                                                                         minimiser_count, 
-                                                                                                         scaling_factor, 
+                std::pair<double, double> cont_dist_ci = hixf::threshold::calculate_containment_index_CI(error_rate,
+                                                                                                         kmer_size,
+                                                                                                         minimiser_count,
+                                                                                                         scaling_factor,
                                                                                                          0.95);
-                return static_cast<size_t>(cont_dist_ci.first * minimiser_count) - fp_correction;
+                double const clow = std::isfinite(cont_dist_ci.first) ? std::clamp(cont_dist_ci.first, 0.0, 1.0) : 0.0;
+                double const result = clow * minimiser_count - fp_correction;
+                return static_cast<size_t>(std::max(0.0, result));
             }
             default:
             {

@@ -173,7 +173,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         {
             user_bin_index.emplace(std::make_pair(index.species().at(i).user_bin, i));
             //if (index.species().at(i).taxid.compare("160232") == 0)
-            //            std::cerr << index.species().at(user_bin_index[count.first]).organism_name << "\t" << count.first << "\t" << count.second << std::endl;
+            //            std::cerr << index.species().at(user_bin_index.at(count.first)).organism_name << "\t" << count.first << "\t" << count.second << std::endl;
 
         }
     };
@@ -285,13 +285,13 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
                     if (static_cast<double>(count.second) < static_cast<double>(max_count) * 0.8)
                         continue;
                     result_string += id + '\t';
-                    result_string += index.species().at(user_bin_index[count.first]).accession_id;
+                    result_string += index.species().at(user_bin_index.at(count.first)).accession_id;
                     result_string += '\t';
-                    result_string += index.species().at(user_bin_index[count.first]).organism_name;
+                    result_string += index.species().at(user_bin_index.at(count.first)).organism_name;
                     result_string += '\t';
-                    result_string += index.species().at(user_bin_index[count.first]).taxid;
+                    result_string += index.species().at(user_bin_index.at(count.first)).taxid;
                     result_string += '\t';
-                    result_string += std::to_string(index.species().at(user_bin_index[count.first]).seq_len);
+                    result_string += std::to_string(index.species().at(user_bin_index.at(count.first)).seq_len);
                     result_string += '\t';
                     result_string += std::to_string(seq.size());
                     result_string += '\t';
@@ -299,9 +299,9 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
                     result_string += '\t';
                     result_string += std::to_string(count.second);
                     result_string += '\t';
-                    result_string += index.species().at(user_bin_index[count.first]).taxnames_string;
+                    result_string += index.species().at(user_bin_index.at(count.first)).taxnames_string;
                     result_string += '\t';
-                    result_string += index.species().at(user_bin_index[count.first]).taxid_string;
+                    result_string += index.species().at(user_bin_index.at(count.first)).taxid_string;
                     result_string += '\n';
                 }
             }
@@ -320,7 +320,10 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         auto end = std::chrono::high_resolution_clock::now();
         reads_io_time += std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count();
 
-        cereal_handle.wait();
+        // future::wait() never propagates exceptions raised in the async task (unlike get()),
+        // so a failed/corrupt index load would otherwise pass silently and the search below
+        // would run against a partially-initialized index
+        cereal_handle.get();
 
         hixf::do_parallel(worker, records.size(), arguments.threads, compute_time);
     }
@@ -383,7 +386,15 @@ int execute(seqan3::argument_parser & parser)
         return -1;
     }
 
-    search_hixf(config);
+    try
+    {
+        search_hixf(config);
+    }
+    catch (std::exception const & e)
+    {
+        std::cerr << "[TAXOR SEARCH ERROR] " << e.what() << '\n';
+        return -1;
+    }
 
     return 0;
 }

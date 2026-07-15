@@ -1,6 +1,7 @@
 
 #include "kmer_model.hpp"
 #include "gaussian_inverse.hpp"
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 
@@ -19,8 +20,8 @@ namespace hixf::threshold
         double alpha = 1 - confidence;
         //std::cout << varN << "\t" << q << std::endl;
         double z = NormalCDFInverse(1.0 - alpha / 2.0);
-        size_t low = static_cast<size_t>(floor(kmer_count * q - z * sqrt(varN)));
-        size_t high = static_cast<size_t>(ceil(kmer_count * q + z * sqrt(varN)));
+        size_t low = static_cast<size_t>(std::max(0.0, floor(kmer_count * q - z * sqrt(varN))));
+        size_t high = static_cast<size_t>(std::max(0.0, ceil(kmer_count * q + z * sqrt(varN))));
         TInterval ci = std::make_pair(low , high );
         return ci;
     }

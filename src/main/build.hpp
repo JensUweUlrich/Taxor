@@ -168,13 +168,12 @@ std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> compute_bin_numbers(std::v
 	}
 
 	std::vector<std::pair<uint64_t, uint64_t>> finished_batches{};
-	while (finished_batches.size() < future_store.size())
+	// future::get() may only be called once per future; get() already blocks
+	// until the result is ready, so a single pass over all futures suffices
+	for (auto &future : future_store)
 	{
-		for (auto &future : future_store) 
-		{
-			std::vector<std::pair<uint64_t, uint64_t>> tmp = future.get();
-            finished_batches.insert(finished_batches.end(), tmp.begin(), tmp.end());
-        }
+		std::vector<std::pair<uint64_t, uint64_t>> tmp = future.get();
+		finished_batches.insert(finished_batches.end(), tmp.begin(), tmp.end());
 	}
 
 	std::cout << "All threads finished" << std::endl;
@@ -198,7 +197,7 @@ std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> compute_bin_numbers(std::v
 			species[result.first].first_bin = 0;
 			bin_nr = result.second;
 			species[result.first].last_bin = bin_nr - 1;
-			first_species = species_counter + 1;
+			first_species = species_counter;
 		}
 		else
 		{
@@ -213,7 +212,7 @@ std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> compute_bin_numbers(std::v
 	
 	if (bin_nr > 0)
 	{
-		filter_bins.push_back(std::make_tuple(bin_nr,first_species, species_counter-1));
+		filter_bins.push_back(std::make_tuple(bin_nr,first_species, species_counter));
 		std::cout << f_index++ << "\t" << bin_nr << "\t" << cum_bin_nr << std::endl;
 	}
 	double mbytes = (double) (cum_bin_nr * 100000 * 1.23 * 8) / (double) 8388608;

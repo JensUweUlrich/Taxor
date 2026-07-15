@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <utility>
 #include <cstdlib>
 #include <cassert>
@@ -38,14 +39,19 @@ namespace hixf::threshold
     double get_min_syncmer_match_ratio(size_t kmer_size, double error_rate)
     {
         assert(kmer_size % 2 == 0);
-        assert(kmer_size >= 10u);
+        assert(kmer_size >= 12u);
         assert(kmer_size <= 30u);
         assert(error_rate >= 0);
-        assert(error_rate <= 0.2);
+
+        // clamp kmer_size and error_rate to the range covered by the calibrated
+        // matching_ratios table, since the table lookup below is otherwise an
+        // out-of-bounds access (asserts are compiled out in release builds)
+        size_t const clamped_kmer_size = std::min<size_t>(30u, std::max<size_t>(12u, kmer_size));
+        double const clamped_error_rate = std::clamp(error_rate, 0.0, 0.2);
 
         //size_t accuracy = static_cast<size_t>((1.0 - error_rate) * 100.0);
-        size_t row_index = ceil((1.0 - error_rate) * 100.0 - 80.0);//accuracy - 80;
-        size_t col_index = kmer_size - 10 - ((kmer_size-10)/2) - 1;
+        size_t row_index = static_cast<size_t>(ceil((1.0 - clamped_error_rate) * 100.0 - 80.0));//accuracy - 80;
+        size_t col_index = (clamped_kmer_size - 12) / 2;
         return matching_ratios[row_index][col_index];
     }
 

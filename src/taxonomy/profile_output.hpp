@@ -40,7 +40,7 @@ void write_biobox_profiling_file(std::string &output_file,
     {
         for (auto & rank : tax_rank_abundances)
         {
-            if (rank.second.rank.compare(tr) == 0 && rank.second.percentage > threshold)
+            if (rank.second.rank.compare(tr) == 0 && rank.second.percentage >= threshold)
                 fout << rank.second.taxid << "\t" << rank.second.rank << "\t" << rank.second.taxid_string << "\t"
                         << rank.second.taxname_string << "\t" << format(rank.second.percentage*100,6) << "\n";
         }
@@ -68,7 +68,7 @@ void write_sequence_abundance_file(std::string &output_file,
         for (auto & rank : tax_rank_abundances)
         {
             //std::cout << tr << "\t" << rank.second.taxid << std::endl;
-            if (rank.second.rank.compare(tr) == 0 && rank.second.percentage > threshold)
+            if (rank.second.rank.compare(tr) == 0 && rank.second.percentage >= threshold)
                 fout << rank.second.taxid << "\t" << rank.second.rank << "\t" << rank.second.taxid_string << "\t"
                         << rank.second.taxname_string << "\t" << format(rank.second.percentage*100,6) << "\n";
         }

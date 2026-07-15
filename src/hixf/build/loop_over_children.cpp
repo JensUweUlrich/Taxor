@@ -36,6 +36,7 @@ void loop_over_children(std::vector<ankerl::unordered_dense::set<size_t>> & pare
 
     size_t const number_of_mutex = (data.node_map[current_node].number_of_technical_bins + 63) / 64;
     std::vector<std::mutex> local_ixf_mutex(number_of_mutex);
+    std::mutex max_bin_hashes_mutex{};
     bool is_third{false};
     if (is_second)
         is_third = true;
@@ -55,16 +56,20 @@ void loop_over_children(std::vector<ankerl::unordered_dense::set<size_t>> & pare
             // to reduce peak memory
             if (!is_root && !is_second)
                 insert_into_bins(hashes, parent_hashes, 1, parent_bin_index);
-            
-            // number of hashes stored in child IXF equals number of hashes in one corresponding bin
-            // of current node => maximum bin size for current node's IXF needs to be known before
-            // constructing the IXF at the current level
+        }
+
+        // number of hashes stored in child IXF equals number of hashes in one corresponding bin
+        // of current node => maximum bin size for current node's IXF needs to be known before
+        // constructing the IXF at the current level
+        // guarded by its own mutex since parent_bin_index (and thus the bucket lock above) is
+        // independent of which children may race to update this shared scalar
+        {
             auto &child_node_data = data.node_map[child];
+            std::lock_guard<std::mutex> guard{max_bin_hashes_mutex};
             if (child_node_data.number_of_hashes > current_node_data.max_bin_hashes)
                 current_node_data.max_bin_hashes = child_node_data.number_of_hashes;
-
         }
-        
+
     };
 
     size_t number_of_threads{};

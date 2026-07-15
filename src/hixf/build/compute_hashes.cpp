@@ -29,7 +29,7 @@ using sequence_file_t = seqan3::sequence_file_input<dna4_traits, seqan3::fields<
 		 end = seq.find("N", start);
 		 if (end > seqlen)
 		 {
-			 std::string s = seq.substr(start, seqlen - start - 1);
+			 std::string s = seq.substr(start, seqlen - start);
 			 splittedStrings.push_back(s);
 			 break;
 		 }
