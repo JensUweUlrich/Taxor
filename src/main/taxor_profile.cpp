@@ -3,20 +3,49 @@
 #include <seqan3/utility/range/to.hpp>
 #include <ranges>
 #include <math.h>
-#include <algorithm> 
+#include <algorithm>
+#include <tuple>
 
 #include "taxor_profile_configuration.hpp"
 #include "taxor_profile.hpp"
 #include "search_results.hpp"
 #include "parallel_util.hpp"
+#include "skim_classifier.hpp"
 #include <taxutil.hpp>
 #include <profile_output.hpp>
 
 #include <ankerl/unordered_dense.h>
 
+/*!\file taxor_profile.cpp
+ * \brief Implements the `taxor profile` subcommand.
+ *
+ * Turns a `taxor search` results file into a taxonomic abundance profile
+ * (CAMI-format report/sequence-abundance/binning files). Two independent
+ * read classification strategies are available, selected via
+ * `--classification-method`:
+ *
+ *  - "em" (default): reference filtering to suppress near-identical strain
+ *    redundancy (remove_matches_to_nonunique_refs, remove_low_confidence_references,
+ *    filter_ref_associations), followed by iterative expectation-maximization
+ *    (expectation_maximization) over per-read posterior probabilities.
+ *  - "skim": the SKiM binomial-hypothesis-test classifier (see
+ *    skim_classifier.hpp), a single-pass per-read statistical test with no
+ *    iterative refinement and no cross-read preprocessing.
+ *
+ * Both paths converge on the same downstream reporting functions
+ * (calculate_higher_rank_abundances, calculate_relative_genomic_abundances,
+ * and the taxonomy::write_* functions in profile_output.hpp), so their
+ * outputs are directly comparable. See tax_profile() for the orchestration
+ * of the whole pipeline.
+ */
+
 namespace taxor::profile
 {
 
+/*!\brief Registers all `taxor profile` command-line options on `parser` and binds them into `config`.
+ * \param parser The seqan3 argument parser for the `profile` subcommand.
+ * \param config The configuration struct whose fields are bound to the CLI options.
+ */
 void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::profile::configuration & config)
 {
     parser.info.version = "0.2.0";
@@ -68,6 +97,36 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::profile::c
                       seqan3::option_spec::standard,
                       seqan3::arithmetic_range_validator{static_cast<size_t>(1), static_cast<size_t>(32)});
 
+    parser.add_subsection("SKiM classification options (only used with --classification-method skim):");
+    // -----------------------------------------------------------------------------------------------------------------
+    parser.add_option(config.classification_method,
+                      '\0', "classification-method",
+                      "Read classification method: \"em\" (Taxor's own EM-based profiler, default) or "
+                      "\"skim\" (the binomial-hypothesis-test classifier from Schneggenburger & Zola, "
+                      "\"SKiM: accurately classifying metagenomic ONT reads in limited memory\"). "
+                      "Both can be run on the same --search-file (with different output files) to compare them.",
+                      seqan3::option_spec::standard,
+                      seqan3::value_list_validator{"em", "skim"});
+
+    parser.add_option(config.skim_kmer_size,
+                      '\0', "kmer-size",
+                      "k-mer size used when building the index (required for --classification-method skim; "
+                      "must match the value used for taxor build/search).",
+                      seqan3::option_spec::standard,
+                      seqan3::arithmetic_range_validator{static_cast<size_t>(1), static_cast<size_t>(64)});
+
+    parser.add_option(config.skim_nfixed,
+                      '\0', "skim-nfixed",
+                      "SKiM's fixed normalization sample size for the binomial test (default: 100, matching the paper).",
+                      seqan3::option_spec::standard,
+                      seqan3::arithmetic_range_validator{static_cast<size_t>(1), static_cast<size_t>(100000)});
+
+    parser.add_option(config.skim_cutoff_exponent,
+                      '\0', "skim-cutoff-exponent",
+                      "SKiM's p-value cutoff, as a power of ten: cutoff = 10^-e (default: e=12, matching the paper).",
+                      seqan3::option_spec::standard,
+                      seqan3::arithmetic_range_validator{static_cast<size_t>(1), static_cast<size_t>(300)});
+
 
     parser.add_flag(config.output_verbose_statistics,
                     '\0', "output-verbose-statistics",
@@ -82,6 +141,11 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::profile::c
                     seqan3::option_spec::hidden);
 }
 
+/*!\brief Splits `str` on every occurrence of `delimiter` into a vector of substrings.
+ * \param str The string to split (not modified).
+ * \param delimiter The single character to split on.
+ * \return The substrings between delimiters, in order; consecutive delimiters produce empty substrings.
+ */
 std::vector<std::string> str_split(std::string &str, char delimiter)
 {
 
@@ -97,6 +161,16 @@ std::vector<std::string> str_split(std::string &str, char delimiter)
     return std::move(seglist);
 }
 
+/*!\brief Parses a `taxor search` results TSV file into per-read candidate match lists.
+ * \param filepath Path to the tab-separated search-results file (see the "search" section of the README for the
+ *        10-column format: QUERY_NAME, ACCESSION, REFERENCE_NAME, TAXID, REF_LEN, QUERY_LEN, QHASH_COUNT,
+ *        QHASH_MATCH, TAX_STR, TAX_ID_STR; a row with ACCESSION=="-" marks a read with no match at all).
+ * \param taxpath[out] Filled with each accession id's (TAX_ID_STR, TAX_STR) lineage pair, the first time that
+ *        accession is encountered.
+ * \return A map from read id to the list of its candidate reference matches (a single "-" entry if the read has no
+ *         match). A read's line(s) are expected to be contiguous in the file; a "-" line is only kept if the read
+ *         has no other match recorded yet.
+ */
 std::map<std::string, std::vector<taxonomy::Search_Result>> parse_search_results(std::string const filepath,
                                                                     std::map<std::string, std::pair<std::string, std::string>> &taxpath)
 {
@@ -170,6 +244,16 @@ std::map<std::string, std::vector<taxonomy::Search_Result>> parse_search_results
 }
 
 
+/*!\brief Collects every reference accession that has at least one uniquely-mapping read.
+ *
+ * "Uniquely mapping" here means a read whose candidate list has exactly one entry (i.e. it
+ * matched only this one reference during search) - used as supporting evidence that a
+ * reference is a genuine hit and not just along for the ride on another reference's reads.
+ *
+ * \param search_results Parsed search results (read only).
+ * \param threads Number of worker threads to partition the read scan across.
+ * \return The set of accession ids with at least one uniquely-mapping read.
+ */
 ankerl::unordered_dense::set<std::string> get_refs_with_uniquely_mapping_reads(std::map<std::string, std::vector<taxonomy::Search_Result>> &search_results,
                                                                                 uint8_t threads = 1u)
 {
@@ -204,12 +288,23 @@ ankerl::unordered_dense::set<std::string> get_refs_with_uniquely_mapping_reads(s
 }
 
 
-/**
- *  Remove all ambiguous read-to-reference assignments where the reference has no unique mapping
+/*!\brief Removes ambiguous read-to-reference assignments where the reference has no unique mapping.
  *
- *  Each map entry (one read's candidate list) is mutated independently of every other
- *  entry, and only reads (never mutates) the shared ref_unique_mappings set, so this is
- *  safe to split across threads with no merge step required.
+ * For each read with more than one candidate reference: if at least one of its candidates is
+ * in `ref_unique_mappings` (i.e. it's independently supported by some other, uniquely-mapping
+ * read), every candidate *not* in that set is dropped from this read's list, leaving only the
+ * independently-supported candidate(s). Reads with no independently-supported candidate at all
+ * are left unchanged (still ambiguous). If this empties a read's candidate list, it is replaced
+ * with a single "-" (unclassified) placeholder.
+ *
+ * Each map entry (one read's candidate list) is mutated independently of every other
+ * entry, and only reads (never mutates) the shared ref_unique_mappings set, so this is
+ * safe to split across threads with no merge step required.
+ *
+ * \param search_results Search results to filter in place.
+ * \param ref_unique_mappings Accession ids known to have at least one uniquely-mapping read (see
+ *        get_refs_with_uniquely_mapping_reads); read-only.
+ * \param threads Number of worker threads to partition the read scan across.
 */
 void remove_matches_to_nonunique_refs(std::map<std::string, std::vector<taxonomy::Search_Result>>& search_results,
                                       ankerl::unordered_dense::set<std::string>& ref_unique_mappings,
@@ -266,6 +361,13 @@ void remove_matches_to_nonunique_refs(std::map<std::string, std::vector<taxonomy
 }
 
 
+/*!\brief Counts, per reference accession, how many reads map to it uniquely vs. ambiguously.
+ * \param search_results Parsed search results (read only).
+ * \param threads Number of worker threads to partition the read scan across.
+ * \return Map from accession id to (unique_read_count, ambiguous_read_count); used by
+ *         remove_low_confidence_references to decide which references have enough independent
+ *         support to keep.
+ */
 std::map<std::string,std::pair<uint64_t,uint64_t>> count_unique_ambiguous_mappings_per_reference(
                                 std::map<std::string, std::vector<taxonomy::Search_Result>>& search_results,
                                 uint8_t threads = 1u)
@@ -323,6 +425,20 @@ std::map<std::string,std::pair<uint64_t,uint64_t>> count_unique_ambiguous_mappin
     return std::move(map_counts);
 }
 
+/*!\brief Keeps only references with enough independently-supported (unique) reads, then re-filters ambiguous reads accordingly.
+ *
+ * A reference is "accepted" if it has at least `min_unique_mappings` uniquely-mapping reads AND
+ * unique reads make up at least `min_fraction_unique` of all its reads (unique + ambiguous).
+ * Ambiguous read candidates pointing at a non-accepted reference are then dropped via
+ * remove_matches_to_nonunique_refs, reusing the exact same "keep only accepted candidates" logic
+ * as the first filtering round.
+ *
+ * \param search_results Search results to filter in place.
+ * \param map_counts Per-reference unique/ambiguous read counts, from count_unique_ambiguous_mappings_per_reference.
+ * \param min_unique_mappings Minimum number of uniquely-mapping reads a reference needs to be accepted.
+ * \param min_fraction_unique Minimum fraction of a reference's reads that must be unique (not ambiguous) to be accepted.
+ * \param threads Number of worker threads to partition the read scan across.
+ */
 void remove_low_confidence_references(std::map<std::string, std::vector<taxonomy::Search_Result>>& search_results,
                                       std::map<std::string,std::pair<uint64_t,uint64_t>>& map_counts,
                                       uint8_t min_unique_mappings,
@@ -340,9 +456,26 @@ void remove_low_confidence_references(std::map<std::string, std::vector<taxonomy
 }
 
 
-/** 
- * Filtering out suspicious mappings using an approach similar to
- * the two-stage taxonomy assignment algorithm in MegaPath (Leung et al., 2020)
+/*!\brief Detects references that "explain" reads better than a near-identical strain, and merges/reassigns accordingly.
+ *
+ * Filters out suspicious mappings using an approach similar to the two-stage taxonomy
+ * assignment algorithm in MegaPath (Leung et al., 2020). In outline:
+ *  1. Build, per reference, its unique/total read counts and (for ambiguous reads) which other
+ *     references it co-occurs with and how often (Ref_Map_Info::associated_species).
+ *  2. For each pair of co-occurring references, decide (based on relative read support and
+ *     >=95% mapping overlap) whether one is "explained by" the other, recording that in
+ *     `explained_refs`.
+ *  3. Flatten transitive "explained by" chains (bounded-pass, cycle-safe - see the loop's own
+ *     comment for why an unbounded fixed-point loop is unsafe here).
+ *  4. Reassign/drop ambiguous reads' ("size() > 1") ambiguous candidates according to
+ *     `explained_refs`, and drop explained references from the returned taxa map.
+ *
+ * \param search_results Search results to filter/reassign in place.
+ * \param threads Number of worker threads to partition the read scan across (used for the
+ *        per-read passes; the reference-level "explains" computation is sequential, since it's
+ *        bounded by the number of distinct references, not reads).
+ * \return Map from surviving accession id to its reference length, for use as the taxa universe
+ *         in downstream abundance calculation (e.g. expectation_maximization).
 */
 std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std::vector<taxonomy::Search_Result>> &search_results, uint8_t threads)
 {
@@ -598,6 +731,10 @@ std::map<std::string, size_t> filter_ref_associations(std::map<std::string, std:
     return std::move(taxa_lengths);
 }
 
+/*!\brief Initializes each taxon's EM prior to a uniform log-probability (log(1/N) for N taxa).
+ * \param taxa The universe of candidate taxa (accession id -> reference length); only the keys are used.
+ * \return Map from accession id to its initial log-prior, the EM loop's starting point before any iteration.
+ */
 std::map<std::string, double> initialize_prior_log_probabilities(std::map<std::string, size_t>& taxa)
 {
     std::map<std::string, double> priors {};
@@ -608,6 +745,19 @@ std::map<std::string, double> initialize_prior_log_probabilities(std::map<std::s
     return std::move(priors);
 }
 
+/*!\brief Computes each read's log-likelihood of originating from each of its candidate references.
+ *
+ * For a read with more than one candidate, the likelihood of each candidate is its
+ * match-count ratio (query_hash_match/query_hash_count) normalized against the sum of all
+ * candidates' ratios, in log space. A read with exactly one (non-"-") candidate gets a
+ * likelihood of 0 (i.e. probability 1, log(1)=0), since there's nothing to normalize against.
+ * "-" (no-match) candidates never contribute a likelihood entry.
+ *
+ * \param search_results Parsed search results (read only).
+ * \param threads Number of worker threads to partition the read scan across.
+ * \return Map from read id to a map of {candidate accession id -> log-likelihood}, consumed by
+ *         expectation_maximization's per-read posterior computation.
+ */
 std::map<std::string, std::map<std::string, double>> calculate_log_likelihoods(std::map<std::string, std::vector<taxonomy::Search_Result>> &search_results,
                                                                                 uint8_t threads = 1u)
 {
@@ -665,6 +815,22 @@ std::map<std::string, std::map<std::string, double>> calculate_log_likelihoods(s
     return std::move(likelihoods);
 }
 
+/*!\brief Recomputes each taxon's sequence (nucleotide) abundance from a fixed read classification.
+ *
+ * For each read currently assigned to a taxon in `profile_results`, credits that taxon with the
+ * read's query length; a taxon's log-prior becomes log(its total credited bases / all reads'
+ * total bases). This only reads `taxa`'s keys (to pre-seed the accumulator) and `profile_results`
+ * - it does not use the *incoming* `log_priors` values in its computation, so it is equally
+ * correct whether called once (a one-shot "abundance from a fixed classification", as
+ * tax_profile's SKiM path does) or repeatedly inside an EM loop (as expectation_maximization
+ * does, where `profile_results` changes between calls).
+ *
+ * \param log_priors[out] Overwritten (in log space) with each taxon's updated abundance.
+ * \param taxa The universe of candidate taxa (accession id -> reference length); only the keys are used.
+ * \param profile_results Current read -> best-match assignment (see expectation_maximization / skim::classify_reads).
+ * \param threads Number of worker threads to partition the read scan across.
+ * \return The (log-space) unclassified abundance, i.e. log(total bases of unclassified reads / all reads' total bases).
+ */
 double update_log_prior_probabilities(std::map<std::string, double> &log_priors,
                                     std::map<std::string, size_t> & taxa,
                                     std::map<std::string, std::vector<taxonomy::Search_Result>> &profile_results,
@@ -752,6 +918,19 @@ static std::string strip_rank_prefix(std::string const & taxname)
     return taxname.size() > 3 ? taxname.substr(3) : std::string{};
 }
 
+/*!\brief Rolls up per-taxon abundances to every higher rank (genus, family, ..., superkingdom).
+ *
+ * For each taxon with nonzero abundance, walks its GTDB-style `;`-separated lineage string
+ * (from `taxpath`, keyed by accession id) and, for every rank along that lineage, accumulates
+ * the taxon's abundance into that rank's Profile_Output entry (creating it on first encounter).
+ * A taxon's rank is read from its own lineage entry's single-character prefix (s/g/f/o/c/p/k),
+ * not from its position in the lineage string, so this is robust to a lineage missing a level.
+ *
+ * \param species_abundances Map from accession id (or "unclassified") to its relative abundance;
+ *        entries with abundance 0 are skipped, "unclassified" is passed through as its own entry.
+ * \param taxpath Map from accession id to its (TAX_ID_STR, TAX_STR) lineage pair (from parse_search_results).
+ * \return Map from taxon id (at every rank) to its rolled-up Profile_Output (rank, lineage strings, percentage).
+ */
 std::map<std::string, taxonomy::Profile_Output> calculate_higher_rank_abundances(std::map<std::string, double> &species_abundances,
                                                             std::map<std::string, std::pair<std::string, std::string>> &taxpath)
 {
@@ -829,6 +1008,26 @@ std::map<std::string, taxonomy::Profile_Output> calculate_higher_rank_abundances
     
 }
 
+/*!\brief Taxor's EM-based read classifier: iteratively refines per-taxon abundances and per-read best matches.
+ *
+ * Each iteration: recomputes per-read log-likelihoods (calculate_log_likelihoods), then for
+ * every read combines each candidate's likelihood with its taxon's current log-prior to get a
+ * posterior; the candidate(s) with the highest posterior become that read's current best match
+ * (profile_results), and the single candidate with the *lowest* posterior is pruned from the
+ * read's candidate list (so, over iterations, each read's list shrinks towards its best match).
+ * Priors are then updated from the new best-match assignment (update_log_prior_probabilities).
+ * Stops after `iterations` steps, or earlier once the total log-likelihood's improvement drops
+ * below a fixed convergence threshold.
+ *
+ * \param iterations Maximum number of EM iterations (see --em-steps).
+ * \param taxa The universe of candidate taxa (accession id -> reference length), from filter_ref_associations.
+ * \param search_results Parsed (and pre-filtered) search results; each read's candidate list is
+ *        progressively pruned in place as the EM loop converges.
+ * \param profile_results[out] Final read -> best-match assignment (one entry per read, single
+ *        "-" placeholder for reads that never scored against any candidate).
+ * \param threads Number of worker threads to partition the read scan across.
+ * \return Map from accession id (plus "unclassified") to its final relative sequence abundance.
+ */
 std::map<std::string, double> expectation_maximization(size_t iterations,
                               std::map<std::string, size_t> & taxa,
                               std::map<std::string, std::vector<taxonomy::Search_Result>> &search_results,
@@ -980,6 +1179,20 @@ std::map<std::string, double> expectation_maximization(size_t iterations,
     return std::move(log_priors);
 }
 
+/*!\brief Computes each taxon's relative *genomic* abundance (genome copy number), as opposed to sequence abundance.
+ *
+ * Unlike update_log_prior_probabilities's per-base sequence abundance, this divides each
+ * taxon's total credited bases by its own reference length first (an average depth-of-coverage
+ * proxy), then normalizes those coverage values against each other - so a short genome
+ * covered by few reads can rank comparably to a long genome covered by many, reflecting genome
+ * *copies* in the sample rather than raw sequenced bases. Unclassified reads are excluded
+ * entirely (there is no "unclassified" entry in the output, unlike the sequence-abundance path).
+ *
+ * \param log_priors[out] Cleared and refilled with each taxon's relative genomic abundance (linear space).
+ * \param taxa The universe of candidate taxa (accession id -> reference length).
+ * \param profile_results Final read -> best-match assignment (see expectation_maximization / skim::classify_reads).
+ * \param threads Number of worker threads to partition the read scan across.
+ */
 void calculate_relative_genomic_abundances(std::map<std::string, double> &log_priors,
                                            std::map<std::string, size_t> & taxa,
                                            std::map<std::string, std::vector<taxonomy::Search_Result>> &profile_results,
@@ -1055,44 +1268,98 @@ void calculate_relative_genomic_abundances(std::map<std::string, double> &log_pr
 
 }
 
+/*!\brief Orchestrates the full `taxor profile` pipeline: parse -> classify -> report.
+ *
+ * Parses the search-results file once, then branches on `config.classification_method`:
+ *  - "skim": skim::classify_reads directly on the parsed results, followed by a single
+ *    (non-iterative) call to update_log_prior_probabilities to get sequence abundances - see
+ *    skim_classifier.hpp for why one call is mathematically sufficient here.
+ *  - "em" (default): the two rounds of reference filtering, filter_ref_associations, then
+ *    expectation_maximization.
+ *
+ * Both branches converge on the same downstream calls (calculate_higher_rank_abundances,
+ * calculate_relative_genomic_abundances, and the taxonomy::write_* output functions), so their
+ * results are directly comparable.
+ *
+ * \param config Parsed CLI configuration (input/output file paths and all algorithm parameters).
+ */
 void tax_profile(taxor::profile::configuration& config)
 {
     // <taxid, <taxid_string, taxname_string>>
     std::cout << "Parsing search results..." << std::flush;
     std::map<std::string, std::pair<std::string, std::string>> taxpath{};
     std::map<std::string, std::vector<taxonomy::Search_Result>> search_results = parse_search_results(config.search_file, taxpath);
-
     std::cout << "done" << std::endl;
-    std::cout << "Remove matches to nonunique references..." << std::flush;
 
-    // 1st round of reference filtering
-    ankerl::unordered_dense::set<std::string> ref_unique_mappings = get_refs_with_uniquely_mapping_reads(search_results, config.threads);
-    remove_matches_to_nonunique_refs(search_results, ref_unique_mappings, config.threads);
-    ref_unique_mappings.clear();
-
-    std::cout << "done" << std::endl;
-    std::cout << "Remove low confidence references..." << std::flush;
-
-    // 2nd round of reference filtering
-    std::map<std::string,std::pair<uint64_t,uint64_t>> map_counts = count_unique_ambiguous_mappings_per_reference(search_results, config.threads);
-    // at least 3 uniquely mapped reads & at least 10% of all mappings unique
-    // TODO: may use different parameters for Illumina data
-    remove_low_confidence_references(search_results, map_counts, 3, 0.01, config.threads);
-    map_counts.clear();
-   
-    std::cout << "done" << std::endl;
-    std::cout << "Filter associated references..." << std::flush;
-
-    std::map<std::string, size_t> found_taxa = filter_ref_associations(search_results, config.threads);
-   
-    std::cout << "done" << std::endl;
-    std::cout << "Start EM algorithm..." << std::flush;
-
+    std::map<std::string, size_t> found_taxa{};
     std::map<std::string, std::vector<taxonomy::Search_Result>> profile_results{};
-    // returns nucleotide abundances
-    std::map<std::string, double> tax_abundances = expectation_maximization(config.em_steps, found_taxa, search_results, profile_results, config.threads);
+    std::map<std::string, double> tax_abundances{};
 
-    std::cout << "done" << std::endl;
+    if (config.classification_method == "skim")
+    {
+        // SKiM's classifier is a direct per-read statistical test with no
+        // iterative refinement, so it intentionally skips Taxor's EM-specific
+        // preprocessing (reference filtering, filter_ref_associations) and
+        // operates straight on the parsed search results - keeping it
+        // faithful to the published method is what makes a later
+        // side-by-side comparison against the EM path meaningful.
+        std::cout << "Classifying reads (SKiM)..." << std::flush;
+
+        skim::parameters skim_params{};
+        skim_params.kmer_size = config.skim_kmer_size;
+        skim_params.n_fixed = config.skim_nfixed;
+        skim_params.cutoff = pow(10.0, -static_cast<double>(config.skim_cutoff_exponent));
+
+        std::tie(profile_results, found_taxa) = skim::classify_reads(search_results, skim_params, config.threads);
+        std::cout << "done" << std::endl;
+
+        std::cout << "Calculate sequence abundances..." << std::flush;
+        // Mirrors what expectation_maximization does after its own loop: one
+        // (non-iterative) call is a mathematically correct "sequence
+        // abundance from a fixed classification" computation, since
+        // update_log_prior_probabilities doesn't use its incoming log_priors
+        // values in the computation, only taxa's keys and profile_results.
+        std::map<std::string, double> log_priors = initialize_prior_log_probabilities(found_taxa);
+        double const unclassified_abundance = update_log_prior_probabilities(log_priors, found_taxa, profile_results, config.threads);
+        log_priors.insert(std::move(std::make_pair("unclassified", unclassified_abundance)));
+        for (auto & t : log_priors)
+            log_priors.at(t.first) = exp(t.second);
+        tax_abundances = std::move(log_priors);
+        std::cout << "done" << std::endl;
+    }
+    else
+    {
+        std::cout << "Remove matches to nonunique references..." << std::flush;
+
+        // 1st round of reference filtering
+        ankerl::unordered_dense::set<std::string> ref_unique_mappings = get_refs_with_uniquely_mapping_reads(search_results, config.threads);
+        remove_matches_to_nonunique_refs(search_results, ref_unique_mappings, config.threads);
+        ref_unique_mappings.clear();
+
+        std::cout << "done" << std::endl;
+        std::cout << "Remove low confidence references..." << std::flush;
+
+        // 2nd round of reference filtering
+        std::map<std::string,std::pair<uint64_t,uint64_t>> map_counts = count_unique_ambiguous_mappings_per_reference(search_results, config.threads);
+        // at least 3 uniquely mapped reads & at least 10% of all mappings unique
+        // TODO: may use different parameters for Illumina data
+        remove_low_confidence_references(search_results, map_counts, 3, 0.01, config.threads);
+        map_counts.clear();
+
+        std::cout << "done" << std::endl;
+        std::cout << "Filter associated references..." << std::flush;
+
+        found_taxa = filter_ref_associations(search_results, config.threads);
+
+        std::cout << "done" << std::endl;
+        std::cout << "Start EM algorithm..." << std::flush;
+
+        // returns nucleotide abundances
+        tax_abundances = expectation_maximization(config.em_steps, found_taxa, search_results, profile_results, config.threads);
+
+        std::cout << "done" << std::endl;
+    }
+
     std::cout << "Calculate higher rank sequence abundances.." << std::flush;
     
     std::map<std::string, taxonomy::Profile_Output> rank_profiles = calculate_higher_rank_abundances(tax_abundances,taxpath);
@@ -1119,6 +1386,10 @@ void tax_profile(taxor::profile::configuration& config)
     std::cout << "done" << std::endl;
 }
 
+/*!\brief Entry point for the `taxor profile` subcommand: parses CLI arguments and runs the pipeline.
+ * \param parser The seqan3 argument parser for the `profile` subcommand (options registered by set_up_subparser_layout).
+ * \return 0 on success; -1 if argument parsing/validation fails or tax_profile() throws.
+ */
 int execute(seqan3::argument_parser & parser)
 {
     taxor::profile::configuration config;
@@ -1130,7 +1401,9 @@ int execute(seqan3::argument_parser & parser)
     {
         parser.parse();
 
-        // TODO: sanity check of parameters
+        if (config.classification_method == "skim" && config.skim_kmer_size == 0)
+            throw seqan3::argument_parser_error{"--kmer-size is required (and must match the value used for "
+                                                 "taxor build/search) when --classification-method skim is selected."};
 
     }
     catch (seqan3::argument_parser_error const & ext) // the user did something wrong

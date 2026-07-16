@@ -7,6 +7,15 @@
 #include <cmath>
 #include <iostream>
 
+/*!\file syncmer_model.hpp
+ * \brief Empirical syncmer match-ratio lookup table used as the "syncmer" threshold model.
+ *
+ * Unlike the analytical kmer_model / fracminhash_model, this model does not derive a confidence interval
+ * from a probabilistic mutation process. Instead it is a precomputed matrix of minimum expected
+ * open-syncmer match ratios (fraction of a query's syncmers expected to also occur in a matching reference),
+ * empirically calibrated per (kmer size, read accuracy) combination. get_min_syncmer_match_ratio() looks up
+ * the closest calibrated entry for a given kmer size and error rate.
+ */
 namespace hixf::threshold
 {
     // Matrix that stores minimal matching ratios for each combination of kmer size and read accuracy
@@ -36,6 +45,18 @@ namespace hixf::threshold
                 {1.0,      1.0,      1.0,      1.0,      1.0,       1.0,       1.0,       1.0,       1.0,       1.0}
                                     };
 
+    /*!\brief Looks up the empirically calibrated minimum expected open-syncmer match ratio for a given kmer
+     *        size and sequencing error rate.
+     * \param kmer_size  Size of kmers used; expected to be an even number in [12, 30] (calibrated grid step 2).
+     * \param error_rate Assumed sequencing error rate; values are clamped to [0.0, 0.2], the range covered by
+     *                   the calibration.
+     * \return Minimum fraction of a query's syncmers expected to also match a true reference, read from the
+     *         precomputed matching_ratios matrix.
+     *
+     * kmer_size and error_rate are validated by assertions (compiled out in release builds), but are also
+     * clamped to the range actually covered by the matching_ratios table so that the row/column lookup below
+     * can never go out of bounds even if the assertions are disabled.
+     */
     double get_min_syncmer_match_ratio(size_t kmer_size, double error_rate)
     {
         assert(kmer_size % 2 == 0);
@@ -50,7 +71,9 @@ namespace hixf::threshold
         double const clamped_error_rate = std::clamp(error_rate, 0.0, 0.2);
 
         //size_t accuracy = static_cast<size_t>((1.0 - error_rate) * 100.0);
+        // row = accuracy percentage - 80, i.e. index 0 is 80% accuracy, index 20 is 100% accuracy
         size_t row_index = static_cast<size_t>(ceil((1.0 - clamped_error_rate) * 100.0 - 80.0));//accuracy - 80;
+        // col = kmer sizes 12,14,...,30 mapped to indices 0..9
         size_t col_index = (clamped_kmer_size - 12) / 2;
         return matching_ratios[row_index][col_index];
     }

@@ -15,6 +15,11 @@
 namespace hixf
 {
 
+/*!\file hierarchical_interleaved_xor_filter.hpp
+ * \brief Provides hixf::hierarchical_interleaved_xor_filter, the index data structure built by this module and
+ *        used at query time (e.g. by `taxor search`) to answer set-membership queries against it.
+ */
+
 /*!\brief The HIBF binning directory. A data structure that efficiently answers set-membership queries for multiple
  *        bins.
  * \tparam data_layout_mode_ Indicates whether the underlying data type is compressed. See
@@ -79,13 +84,16 @@ class hierarchical_interleaved_xor_filter
 {
 public:
     // Forward declaration
+    //!\brief Bookkeeping for user and technical bins; see the out-of-line definition below.
     class user_bins;
 
     // Forward declaration
+    //!\brief Manages membership (bulk_contains) queries; see the out-of-line definition below.
     class membership_agent;
 
 
     // Forward declaration
+    //!\brief Manages bulk_count queries; see the out-of-line definition below.
     template <std::integral value_t>
     class counting_agent_type;
 
@@ -299,7 +307,20 @@ private:
     //!\brief A pointer to the augmented hierarchical_interleaved_bloom_filter.
     hixf_t const * const hixf_ptr{nullptr};
 
-    //!\brief Helper for recursive membership querying.
+    /*!\brief Helper for recursive membership querying.
+     * \param values The values to query; forwarded unchanged into recursive calls on merged bins.
+     * \param ixf_idx The index into #hixf_ptr's `ixf_vector`/`next_ixf_id` of the IBF to query at this level.
+     * \param threshold Minimum hit count required for a (merged or user) bin to be reported/recursed into.
+     * \details
+     *
+     * Counts occurrences of `values` in every technical bin of IBF `ixf_idx`, then walks the bins left to
+     * right, accumulating counts (`sum`) across consecutive technical bins that belong to the same user bin
+     * (split bins are stored in adjacent technical bins, detected here by comparing filename indices of
+     * neighbouring bins). Once the run of technical bins for one user/merged bin ends, if `sum` reaches
+     * `threshold`: for a merged bin (negative filename index) recursion continues into that bin's own lower
+     * level IBF (`next_ixf_id`); for an ordinary (leaf) user bin, its index and hit count are appended to
+     * #result_buffer.
+     */
     template <std::ranges::forward_range value_range_t>
     void bulk_contains_impl(value_range_t && values, int64_t const ixf_idx, size_t const threshold)
     {
@@ -424,12 +445,24 @@ class hierarchical_interleaved_xor_filter<FingerprintType>::counting_agent_type
 private:
     //!\brief The type of the augmented hierarchical_interleaved_bloom_filter.
     using hixf_t = hierarchical_interleaved_xor_filter<FingerprintType>;
+    //!\brief The counting agent type of a single-level seqan3::interleaved_xor_filter, used to count `values` in
+    //!       one IBF of #hixf_ptr at a time.
     typedef seqan3::interleaved_xor_filter<FingerprintType>::counting_agent_type TIXFAgent;
 
     //!\brief A pointer to the augmented hierarchical_interleaved_bloom_filter.
     hixf_t const * const hixf_ptr{nullptr};
 
-    //!\brief Helper for recursive bulk counting.
+    /*!\brief Helper for recursive bulk counting.
+     * \param values The values to count; forwarded unchanged into recursive calls on merged bins.
+     * \param ixf_idx The index into #hixf_ptr's `ixf_vector`/`next_ixf_id` of the IBF to query at this level.
+     * \param threshold Minimum hit count required to recurse into a merged bin's lower level IBF.
+     * \details
+     *
+     * Mirrors hierarchical_interleaved_xor_filter::membership_agent::bulk_contains_impl, but instead of
+     * collecting `(user_bin_index, count)` pairs, writes each user bin's total count directly into
+     * #result_buffer at that user bin's index, so the final result is one count per user bin rather than a
+     * sparse list of hits.
+     */
     template <std::ranges::forward_range value_range_t>
     void bulk_count_impl(value_range_t && values, int64_t const ixf_idx, size_t const threshold)
     {

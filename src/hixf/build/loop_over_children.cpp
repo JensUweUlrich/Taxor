@@ -16,6 +16,11 @@
 namespace hixf
 {
 
+/*!\file loop_over_children.cpp
+ * \brief Implements hixf::loop_over_children.
+ */
+
+//!\brief See loop_over_children.hpp for documentation.
 //template <seqan3::data_layout data_layout_mode>
 void loop_over_children(std::vector<ankerl::unordered_dense::set<size_t>> & parent_hashes,
                         std::vector<int64_t> & ixf_positions,
@@ -37,10 +42,12 @@ void loop_over_children(std::vector<ankerl::unordered_dense::set<size_t>> & pare
     size_t const number_of_mutex = (data.node_map[current_node].number_of_technical_bins + 63) / 64;
     std::vector<std::mutex> local_ixf_mutex(number_of_mutex);
     std::mutex max_bin_hashes_mutex{};
+    // A child of a second-level node (one below root) is, by definition, two levels below the root ("is_third").
     bool is_third{false};
     if (is_second)
         is_third = true;
-    
+
+    //!\brief Per-child unit of work: recursively build the child's IXF, then record its position/hashes.
     auto worker = [&](auto && index, auto &&)
     {
         auto & child = children[index];

@@ -4,8 +4,23 @@
 #include "parse_ncbi_taxonomy.hpp"
 #include "taxutil.hpp"
 
+/*!\file parse_ncbi_taxonomy.cpp
+ * \brief Implements parsing of an NCBI/RefSeq-style taxonomy TSV file into
+ *        taxor::taxonomy::Species records for `taxor build`.
+ */
+
 namespace taxor::taxonomy
 {
+    /*!\brief Read a tab-separated NCBI/RefSeq taxonomy file and build one Species per row.
+     * \param filepath Path to the tab-separated taxonomy input file.
+     * \return A vector of Species built from the input rows; rows without a usable
+     *         reference file path are skipped (a warning is printed to stderr for each).
+     *
+     * Each line is expected to hold at least an accession id (column 0) and taxid
+     * (column 1); the reference file/ftp path (column 2) is reduced to its final
+     * path component and stored as Species::file_stem, and organism name / GTDB-style
+     * lineage name and taxid strings (columns 3-5) are copied verbatim if present.
+     */
     std::vector<Species> parse_refseq_taxonomy_file(std::string const filepath)
     {
         std::vector<std::vector<std::string> > tax_file_lines{};

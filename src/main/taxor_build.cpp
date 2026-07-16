@@ -43,11 +43,28 @@
 #include "store_index.hpp"
 #include "taxor_build_configuration.hpp"
 
+/*!\file taxor_build.cpp
+ * \brief Implements the `taxor build` subcommand: parses a taxonomy TSV plus one or
+ * more reference genome directories (searched recursively), computes a hierarchical
+ * binning layout for the reference genomes via the third-party `chopper` library, and
+ * builds the resulting HIXF (Hierarchical Interleaved XOR Filter) index. The actual
+ * filter construction from the chopper layout/pack files is delegated to hixf/build/
+ * (see hixf::create_ixfs_from_chopper_pack()); this file is responsible for CLI
+ * option handling, input validation, taxonomy/genome-file matching, and orchestrating
+ * the counting -> layout -> index-build pipeline.
+ */
+
 namespace taxor::build
 {
 
 using sequence_file_t = seqan3::sequence_file_input<hixf::dna4_traits, seqan3::fields<seqan3::field::seq>>;
 
+/*!\brief Register all `taxor build` CLI options/flags on the sub-parser and bind
+ * them to the corresponding fields of \p config.
+ * \param parser The `build` sub-parser to configure.
+ * \param config The configuration struct whose fields are bound as option targets;
+ * populated once `parser.parse()` is called by the caller.
+ */
 void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::build::configuration & config)
 {
     parser.info.version = "0.2.0";
@@ -102,6 +119,12 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::build::con
                     seqan3::option_spec::hidden);
 }
 
+/*!\brief Split \p str into substrings on every occurrence of \p delimiter.
+ * \param str The string to split (not modified).
+ * \param delimiter The single character to split on.
+ * \return The substrings between delimiters, in order; empty segments (e.g. from
+ * consecutive delimiters) are included as empty strings.
+ */
 std::vector<std::string> str_split(std::string &str, char delimiter)
 {
 
@@ -117,6 +140,16 @@ std::vector<std::string> str_split(std::string &str, char delimiter)
     return std::move(seglist);
 }
 
+/*!\brief Validate and finalize the raw CLI configuration before the build pipeline runs.
+ *
+ * Rejects a syncmer k-mer size above 30, splits the comma-separated
+ * `input_file_name`/`input_sequence_folder` strings into config.input_files /
+ * config.input_folders, checks that every resulting path exists, and eagerly
+ * parses each taxonomy file to fail fast on a malformed input file rather than
+ * partway through the (much more expensive) layout/build steps.
+ * \param config The configuration to validate; config.input_files and
+ * config.input_folders are populated as a side effect.
+ */
 void sanity_checks(taxor::build::configuration & config)
 {
     if (config.use_syncmer)
@@ -165,6 +198,23 @@ void sanity_checks(taxor::build::configuration & config)
 
 }
 
+/*!\brief Try several candidate technical-bin counts (t_max) for the HIXF layout and
+ * keep the one with the lowest expected query cost.
+ *
+ * Candidates are the powers of two from 64 up to config.tmax, plus the multiple of 64
+ * closest to sqrt(number of user bins) (expected to spread bins evenly). For each
+ * candidate, chopper::layout::hierarchical_binning is executed from scratch (into a
+ * temporary output/header buffer pair so a worse candidate doesn't clobber a better
+ * one already found) and its expected HIBF query cost is compared to the best found so
+ * far. Candidates are tried in increasing t_max order and the search stops at the first
+ * non-improving candidate, unless config.force_all_binnings requests exhaustively
+ * trying every candidate. On return, config.tmax is overwritten with the best t_max
+ * found, and data.output_buffer / data.header_buffer contain the layout for that t_max.
+ * \param data Layout data store; its output/header buffers and `previous` level are
+ * mutated across trials and end up holding the winning layout's contents.
+ * \param config Layout configuration; config.tmax is overwritten with the best t_max found.
+ * \return The maximum HIXF id assigned by the winning hierarchical_binning run.
+ */
 size_t determine_best_number_of_technical_bins(chopper::layout::data_store & data, chopper::layout::configuration & config)
 {
     std::stringstream * const output_buffer_original = data.output_buffer;
@@ -232,8 +282,23 @@ size_t determine_best_number_of_technical_bins(chopper::layout::data_store & dat
     return max_hixf_id;
 }
 
-/**
- * @return map<accession_id, filpath>
+/*!\brief List regular files found in \p input_folders, keyed by an accession id
+ * extracted from each file's name.
+ *
+ * For each regular file, the accession id is reconstructed from the first two
+ * underscore-separated parts of the filename stem (e.g. "GCF_000123456.1_..."
+ * yields the accession "GCF_000123456.1"); files whose stem has no underscore
+ * are silently skipped. Only the `RECURSIVE == true` instantiation is used
+ * anywhere in this codebase (via file_list<true>() in create_filename_clusters()),
+ * to walk genome_updater-style nested per-species/per-assembly directory layouts;
+ * the `RECURSIVE == false` instantiation has no call site.
+ * \tparam RECURSIVE If true, each folder is walked recursively
+ * (std::filesystem::recursive_directory_iterator); if false, only its immediate
+ * entries are listed (std::filesystem::directory_iterator).
+ * \param input_folders Directories to search.
+ * \return Map from accession id to the matched file's path. If the same accession
+ * id occurs in more than one file, only the first one encountered is kept
+ * (std::map::emplace does not overwrite an existing key).
  */
 template < bool RECURSIVE > std::map<std::string, std::filesystem::path> file_list( std::vector<std::string> input_folders)
 {
@@ -265,7 +330,21 @@ template < bool RECURSIVE > std::map<std::string, std::filesystem::path> file_li
     return result ;
 }
 
-inline auto create_filename_clusters(taxor::build::configuration const taxor_config, 
+/*!\brief Build a one-genome-file-per-cluster mapping for every taxon in \p orgs,
+ * and record each file's index into \p orgs for later lookup.
+ *
+ * Every species is placed in its own single-file cluster (keyed by accession id);
+ * the actual genome file is looked up by accession id in the map built by
+ * file_list<true>(). \p user_bin_map is populated as a side effect so that later
+ * pipeline stages (see build_hixf()) can map a resolved HIXF user-bin filename
+ * back to the corresponding entry in \p orgs.
+ * \param taxor_config Build configuration; only input_folders is used here.
+ * \param orgs Parsed taxonomy entries; not modified, but indexed to build \p user_bin_map.
+ * \param user_bin_map Output parameter: filled with (genome file path -> index into orgs).
+ * \return Map from accession id to a single-element vector containing that
+ * genome's file path (the vector form matches chopper's expected cluster shape).
+ */
+inline auto create_filename_clusters(taxor::build::configuration const taxor_config,
                                      std::vector<taxonomy::Species> &orgs,
                                      std::map<std::string, uint64_t> &user_bin_map)
 {
@@ -276,6 +355,9 @@ inline auto create_filename_clusters(taxor::build::configuration const taxor_con
     std::map<std::string, std::filesystem::path> files = file_list<true>(taxor_config.input_folders);
     for (uint64_t org_index = 0; org_index < orgs.size(); ++org_index) //auto& species : orgs)
     {
+        // reg/reg1/found below are computed but never used: the actual lookup a few
+        // lines down is a direct accession_id map lookup, not a regex match against
+        // file_stem. Left in place as-is (not part of this documentation pass' scope).
         std::string reg = "^" + orgs[org_index].file_stem + "[\\_a-z]*\\.[a-z\\.]+";
         std::regex reg1(reg);
         bool found = false;
@@ -295,6 +377,22 @@ inline auto create_filename_clusters(taxor::build::configuration const taxor_con
     return filename_clusters;
 }
 
+/*!\brief Compute per-cluster HyperLogLog sketches and k-mer-count estimates using the
+ * (open) minimizer scheme, and write them to \p count_config's count/sketch files.
+ *
+ * Runs one iteration per cluster in an OpenMP parallel-for loop (each iteration builds
+ * its own local sketch, so no locking is needed there); only the shared count/sketch
+ * file writes are wrapped in an `omp critical` section, since std::ofstream is not
+ * safe for concurrent writes from multiple threads. If taxor_config.scaling > 1, hashes
+ * are downsampled by re-hashing each minimizer hash with wyhash and only keeping it
+ * when the re-hash falls below UINT64_MAX / scaling, approximating a 1/scaling
+ * subsample while keeping the same hashes selected across all files that share a hash
+ * value (this is what lets scaled sketches from different genomes stay comparable).
+ * \param filename_clusters One or more genome files per cluster key.
+ * \param count_config chopper counting configuration (output paths, thread count, HLL
+ * sketch precision, etc.).
+ * \param taxor_config Build configuration; kmer_size, window_size and scaling are used here.
+ */
 inline void count_minimizers(robin_hood::unordered_map<std::string, std::vector<std::string>> const & filename_clusters,
                            chopper::count::configuration const & count_config,
                            taxor::build::configuration const taxor_config)
@@ -335,6 +433,10 @@ inline void count_minimizers(robin_hood::unordered_map<std::string, std::vector<
                 {
                     if (taxor_config.scaling > 1)
                     {
+                        // downsample: keep hash iff its wyhash falls in the bottom 1/scaling
+                        // of the uint64 range. Re-hashing avoids bias from the minimizer
+                        // hash's own value distribution and keeps the *same* hashes selected
+                        // across every genome, since the threshold test is a pure function of v.
                         uint64_t v = ankerl::unordered_dense::detail::wyhash::hash(hash);
                         if (double(v) <= double(UINT64_MAX) / double(taxor_config.scaling))
                         {
@@ -363,6 +465,19 @@ inline void count_minimizers(robin_hood::unordered_map<std::string, std::vector<
 
 
 
+/*!\brief Compute per-cluster HyperLogLog sketches and k-mer-count estimates using the
+ * syncmer scheme, and write them to \p count_config's count/sketch files.
+ *
+ * Analogous to count_minimizers(), but hashes sequences with
+ * hashing::seq_to_syncmers() (parameterized by the closed-syncmer offset
+ * `t_syncmer`, derived from kmer_size/syncmer_size) instead of a minimizer view.
+ * The same wyhash-based downsampling by taxor_config.scaling and OpenMP
+ * parallel-for-with-critical-section pattern as count_minimizers() applies here.
+ * \param filename_clusters One or more genome files per cluster key.
+ * \param count_config chopper counting configuration (output paths, thread count, HLL
+ * sketch precision, etc.).
+ * \param taxor_config Build configuration; kmer_size, syncmer_size and scaling are used here.
+ */
 inline void count_syncmers(robin_hood::unordered_map<std::string, std::vector<std::string>> const & filename_clusters,
                            chopper::count::configuration const & count_config,
                            taxor::build::configuration const taxor_config)
@@ -401,6 +516,7 @@ inline void count_syncmers(robin_hood::unordered_map<std::string, std::vector<st
                 {
                     if (taxor_config.scaling > 1)
                     {
+                        // see count_minimizers() for why this downsampling scheme is used
                         uint64_t v = ankerl::unordered_dense::detail::wyhash::hash(hash);
                         if (double(v) <= double(UINT64_MAX) / double(taxor_config.scaling))
                         {
@@ -428,7 +544,22 @@ inline void count_syncmers(robin_hood::unordered_map<std::string, std::vector<st
 }
 
 
-void create_layout(taxor::build::configuration const taxor_config, 
+/*!\brief Drive the chopper counting -> layout pipeline to produce the HIXF binning
+ * layout file consumed later by build_hixf().
+ *
+ * Builds per-species file clusters (create_filename_clusters()), then counts
+ * (approximate) k-mer/minimizer/syncmer set sizes per cluster - using
+ * count_syncmers() if taxor_config.use_syncmer is set, count_minimizers() if a
+ * minimizer window larger than the k-mer size is configured, or chopper's own
+ * exact count_kmers() otherwise - before feeding the resulting counts into
+ * chopper::layout::hierarchical_binning via determine_best_number_of_technical_bins(),
+ * and finally writing the layout (header + body) to layout_config.output_filename.
+ * \param taxor_config Build configuration (k-mer/window/syncmer sizes, scaling, thread count, ...).
+ * \param orgs Parsed taxonomy entries; passed through to create_filename_clusters().
+ * \param user_bin_map Output parameter populated by create_filename_clusters(), mapping
+ * each genome file path to its index in \p orgs.
+ */
+void create_layout(taxor::build::configuration const taxor_config,
                    std::vector<taxonomy::Species> &orgs,
                    std::map<std::string, uint64_t> &user_bin_map)
 {
@@ -494,7 +625,25 @@ void create_layout(taxor::build::configuration const taxor_config,
 
 }
 
-void build_hixf(taxor::build::configuration const config, 
+/*!\brief Build the HIXF index from the chopper layout written by create_layout(),
+ * reattach species metadata to each resulting user bin, and store the finished
+ * index to config.output_file_name.
+ *
+ * Translates \p config into a hixf::build_arguments struct and delegates the actual
+ * filter construction to hixf::create_ixfs_from_chopper_pack() (see hixf/build/).
+ * For every user bin produced, the owning genome file is matched back to its entry
+ * in \p orgs via \p user_bin_map (see the comment at the `.at()` call below for why
+ * a mismatch is treated as a hard error rather than silently defaulting), the
+ * species' `user_bin` id and total sequence length are filled in, and a taxor_index
+ * wrapping the built hixf::hierarchical_interleaved_xor_filter is written to disk
+ * via store_index().
+ * \param config Build configuration (kmer/window/syncmer sizes, scaling, thread count,
+ * output path, use_syncmer flag, ...).
+ * \param orgs Parsed taxonomy entries; user_bin and seq_len are filled in as a side effect.
+ * \param user_bin_map Maps a genome file path (as produced by create_filename_clusters())
+ * to its index in \p orgs.
+ */
+void build_hixf(taxor::build::configuration const config,
                 std::vector<taxonomy::Species> &orgs,
                 std::map<std::string, uint64_t> &user_bin_map)
 {
@@ -562,6 +711,17 @@ void build_hixf(taxor::build::configuration const config,
     store_index(args.out_path, index);
 }
 
+/*!\brief Entry point for `taxor build`, invoked from main.cpp's dispatch in main().
+ *
+ * Registers and parses the build CLI options, runs sanity_checks(), parses every
+ * taxonomy input file into \p orgs, computes the HIXF layout (create_layout()),
+ * and builds+stores the HIXF index (build_hixf()). Each stage is wrapped in its
+ * own try/catch so a failure is reported with a `[TAXOR BUILD ERROR]`-prefixed
+ * message and a non-zero exit code without a stack of unrelated errors.
+ * \param parser The `build` sub-parser, already selected by main.cpp's top-level parser.
+ * \return 0 on success, -1 if CLI parsing/validation, taxonomy parsing, layout
+ * creation, or index building fails.
+ */
 int execute(seqan3::argument_parser & parser)
 {
     taxor::build::configuration config;

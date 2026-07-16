@@ -14,9 +14,14 @@
 namespace hixf
 {
 
+/*!\file read_chopper_pack_file.cpp
+ * \brief Implements hixf::read_chopper_pack_file.
+ */
+
+//!\brief See read_chopper_pack_file.hpp for documentation.
 //template <seqan3::data_layout data_layout_mode>
 void read_chopper_pack_file(build_data & data, std::string const & chopper_pack_filename)
-{   
+{
 
     std::ifstream chopper_pack_file{chopper_pack_filename};
 
@@ -75,6 +80,9 @@ void read_chopper_pack_file(build_data & data, std::string const & chopper_pack_
         // update number of technical bins in current_node-IBF
         current_data.number_of_technical_bins = std::max(current_data.number_of_technical_bins, bin + num_tbs);
 
+        // The record occupying max_bin_index (this node's "favourite child" bin, see node_data::favourite_child)
+        // is placed at the front of remaining_records, so it is the first record hixf::hierarchical_build
+        // processes for this node; all other records are simply appended in file order.
         if (record.bin_indices.back() == current_data.max_bin_index)
             current_data.remaining_records.insert(current_data.remaining_records.begin(), record);
         else

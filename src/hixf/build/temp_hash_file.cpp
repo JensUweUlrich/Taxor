@@ -6,6 +6,11 @@
 namespace hixf
 {
 
+/*!\file temp_hash_file.cpp
+ * \brief Implements the hixf::create_temp_hash_file / hixf::read_from_temp_hash_file overloads.
+ */
+
+//!\brief See temp_hash_file.hpp for documentation.
 void create_temp_hash_file(size_t const ixf_pos, ankerl::unordered_dense::set<size_t> &node_hashes)
 {
     std::string ixf_tmp_name = "interleavedXOR_" + std::to_string(ixf_pos) + ".tmp";
@@ -22,6 +27,7 @@ void create_temp_hash_file(size_t const ixf_pos, ankerl::unordered_dense::set<si
     tmp_stream.close();
 }
 
+//!\brief See temp_hash_file.hpp for documentation.
 void create_temp_hash_file(size_t const ixf_pos, size_t const bin_index, ankerl::unordered_dense::set<size_t> &node_hashes)
 {
     std::string ixf_tmp_name = "interleavedXOR_" + std::to_string(ixf_pos) + "_" + std::to_string(bin_index) + ".tmp";
@@ -38,11 +44,12 @@ void create_temp_hash_file(size_t const ixf_pos, size_t const bin_index, ankerl:
 }
 
 
+//!\brief See temp_hash_file.hpp for documentation.
 void read_from_temp_hash_file(int64_t & ixf_position,
                               std::vector<size_t> &node_hashes,
                               ankerl::unordered_dense::set<std::string>& tmp_files)
 {
-    
+
     std::string ixf_tmp_name = "interleavedXOR_" + std::to_string(ixf_position) + ".tmp";
     auto tmp_dir = std::filesystem::current_path() / "hixf_tmp";
     auto tmp_file = tmp_dir / ixf_tmp_name;
@@ -66,12 +73,13 @@ void read_from_temp_hash_file(int64_t & ixf_position,
 
 }
 
+//!\brief See temp_hash_file.hpp for documentation.
 void read_from_temp_hash_file(size_t const ixf_position,
                               uint16_t const bin_index,
                               std::vector<size_t> &node_hashes,
                               ankerl::unordered_dense::set<std::string>& tmp_files)
 {
-    
+
     std::string ixf_tmp_name = "interleavedXOR_" + std::to_string(ixf_position) + "_" + std::to_string(bin_index) + ".tmp";
     auto tmp_dir = std::filesystem::current_path() / "hixf_tmp";
     auto tmp_file = tmp_dir / ixf_tmp_name;

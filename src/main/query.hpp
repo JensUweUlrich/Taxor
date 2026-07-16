@@ -1,4 +1,21 @@
 
+/*!\file query.hpp
+ * \brief Draft/prototype code for a per-read query classification routine (query_read()).
+ *
+ * The entire remainder of this file, including the `#pragma once` guard and the query_read()
+ * function it contains, is wrapped in a single C-style block comment (`/* ... *\/`) and is
+ * therefore inert: none of it is compiled or reachable.
+ *
+ * Usage check performed while documenting this file: grepping the whole src/ tree for both
+ * "query.hpp" (as an #include target) and "query_read" (the only symbol this file would define)
+ * found no matches outside this file itself. No other file includes query.hpp, and no call sites
+ * for query_read exist elsewhere in the codebase as of this writing. The commented-out body
+ * sketches a per-read classification loop (hashing a read into strobemer/syncmer hashes, bulk
+ * counting them against a hierarchical filter's user bins, and classifying a read based on the
+ * best-matching bin's hit ratio) that appears to be an early prototype superseded by the
+ * classification logic now implemented in taxor_search.cpp / skim_classifier.hpp.
+ */
+
 /*#pragma once
 
 void query_read()

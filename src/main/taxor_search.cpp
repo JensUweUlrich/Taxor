@@ -26,9 +26,20 @@
 #include "taxor_search.hpp"
 #include "taxor_search_configuration.hpp"
 
+/*!\file taxor_search.cpp
+ * \brief Implements the `taxor search` subcommand: loads a prebuilt HIXF index, computes
+ * k-mer/syncmer hashes for each query read, queries the index's membership_agent for
+ * matching reference user bins, applies a statistical (or fixed) threshold to decide which
+ * hits are significant, and writes a TSV report of read-to-reference matches.
+ */
+
 namespace taxor::search
 {
 
+/*!\brief Registers all `taxor search` command-line options on the given argument_parser.
+ * \param parser The seqan3::argument_parser to configure.
+ * \param config The configuration struct whose members are bound to the individual options.
+ */
 void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::search::configuration & config)
 {
     parser.info.version = "0.2.0";
@@ -79,6 +90,11 @@ void set_up_subparser_layout(seqan3::argument_parser & parser, taxor::search::co
                     seqan3::option_spec::hidden);
 }
 
+/*!\brief Splits a string into a list of substrings on a delimiter character.
+ * \param str The string to split (unused after the call; not modified).
+ * \param delimiter The character to split on.
+ * \return The list of substrings between occurrences of delimiter.
+ */
 std::vector<std::string> str_split(std::string &str, char delimiter)
 {
 
@@ -94,6 +110,15 @@ std::vector<std::string> str_split(std::string &str, char delimiter)
     return std::move(seglist);
 }
 
+/*!\brief Validates the parsed configuration and splits comma-separated index/query file lists.
+ *
+ * Splits config.index_file and config.query_file (each possibly a comma-separated list) into
+ * config.index_file_list and config.query_file_list, verifies that every referenced file exists,
+ * and - when more than one index file is given - loads each index just to compare its
+ * k-mer/syncmer/window/scaling parameters, throwing if the index files are not all built with
+ * the same scheme (since results from mismatched indexes could not be combined meaningfully).
+ * \param config The configuration to validate and populate the *_list members of.
+ */
 void sanity_checks(taxor::search::configuration & config)
 {
     // enable using seveal index files
@@ -150,15 +175,31 @@ void sanity_checks(taxor::search::configuration & config)
 
 }
 
+/*!\brief Searches all reads in one query file against one HIXF index and appends matches to outstrm.
+ *
+ * Loads the index (asynchronously, overlapped with reading the first chunk of query reads),
+ * then processes the query file in chunks of 1024 records. For each chunk, hashes are computed
+ * per read (syncmers or minimiser k-mers, depending on the index) and the chunk is searched in
+ * parallel via hixf::do_parallel; each worker thread queries the index's membership_agent and
+ * writes matching reference lines for its share of the reads to the shared outstrm.
+ * \param arguments Search parameters (index/query file paths, thread count, threshold settings, ...);
+ *                   populated further from the loaded index's k-mer/syncmer scheme once available.
+ * \param index The (not-yet-loaded) taxor_index to load and search against; taken by rvalue reference
+ *              since this function loads it in place.
+ * \param outstrm Shared, mutex-guarded output stream that results are appended to.
+ */
 void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && index, hixf::sync_out &outstrm)
 {
-    double s_factor = 10.0;
+    double s_factor = 10.0; // currently unused: only referenced from the commented-out scaling lambda below
     double index_io_time{0.0};
     double reads_io_time{0.0};
     double compute_time{0.0};
     hixf::threshold::threshold thresholder;
     // map hixf user bin to species list index position
     std::map<size_t, size_t> user_bin_index{};
+    // Loading the (potentially large) index from disk is independent of reading query records,
+    // so it is kicked off asynchronously here and only waited on just before the first chunk is
+    // searched (see index_load_checked below), overlapping index I/O with query file I/O.
     auto cereal_worker = [&]()
     {
         load_index(index, arguments, index_io_time);
@@ -191,15 +232,33 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
 */
     
     std::mutex count_mutex;
-    double mean_sum{0.0};
+    double mean_sum{0.0}; // currently unused: never assigned to or read outside its declaration
     uint16_t reads{0};
     // Some already-built indexes may have a user bin with no matching species metadata
     // (a data-integrity bug in the build step, now fixed - see taxor_build.cpp). Rather
     // than aborting the whole search on the first affected match, skip just that match and
     // warn once (shared/thread-safe across worker threads) so the user knows to rebuild.
     std::atomic_flag warned_missing_user_bin = ATOMIC_FLAG_INIT;
+    /*!\brief Per-chunk worker: hashes and searches records [start, end) of the current chunk.
+     *
+     * Invoked once per thread by hixf::do_parallel, each call handling a disjoint sub-range of
+     * `records`. Thread-safety within this worker relies on a few things actually present in the
+     * code: (1) each invocation constructs its own local `counter` (membership_agent), so worker
+     * threads never share one membership_agent's internal state; (2) `hashes` and `result_string`
+     * are local to the lambda invocation (effectively per-thread buffers reused across the loop
+     * body); (3) the shared `reads` counter is only mutated under count_mutex; (4) the one-time
+     * "missing user bin" warning is guarded by the std::atomic_flag warned_missing_user_bin so it
+     * is printed at most once even though multiple threads may hit the condition concurrently;
+     * (5) all writes to the shared `outstrm` go through hixf::sync_out::write, which internally
+     * locks its own mutex around the underlying std::ofstream.
+     * \param start Index of the first record (in `records`) to process.
+     * \param end Index one past the last record (in `records`) to process.
+     */
     auto worker = [&](size_t const start, size_t const end)
     {
+        // Constructed fresh per worker invocation (i.e. per thread, per chunk) rather than
+        // shared, so concurrent threads never contend on or corrupt one membership_agent's
+        // internal state.
         auto counter = [&index]()
         {
             return index.ixf().membership_agent();
@@ -221,6 +280,12 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
             result_string.clear();
 
             
+            // Compute the read's hash set, either as syncmers or as classic minimiser k-mers,
+            // depending on how the index was built (arguments.compute_syncmer, set from the
+            // loaded index). When arguments.scaling > 1, apply FracMinHash-style subsampling:
+            // a hash is kept only if wyhash(hash) falls below UINT64_MAX/scaling, i.e. roughly
+            // a 1/scaling fraction of hashes are retained (must mirror the same scaling scheme
+            // used when the index was built, or matches would be missed/skewed).
             if (arguments.compute_syncmer)
             {
                 seqan3::dna5_vector dna5_vector{seq.begin(), seq.end()};
@@ -261,10 +326,14 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
                 }
                 //auto minimiser_view = seq | hash_adaptor | std::views::common;
                 //hashes.assign(minimiser_view.begin(), minimiser_view.end());
-                
+
             }
             size_t const hash_count{hashes.size()};
-            size_t fp_correction = hash_count * 0.003;
+            size_t fp_correction = hash_count * 0.003; // currently unused: computed but never read afterward
+            // thresholder.get() derives the minimum number of matching hashes required for a hit
+            // to count as significant, from the observed hash_count and the read's approximate
+            // per-hash "coverage" (hash_count relative to the number of possible k-mer positions
+            // in the read), combined with the configured error_rate - see hixf/search/threshold.hpp.
             size_t threshold = thresholder.get(hash_count, (double)hash_count / ((double)seq.size() - (double)index.kmer_size() + 1.0));
 
             auto & result = counter.bulk_contains(hashes, threshold); // Results contains user bin IDs
@@ -277,6 +346,9 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
                 result_string += std::to_string(seq.size()) + "\n";
             }
             else{
+                // Report near-best hits rather than only the single best one: find the highest
+                // hash-match count among all candidate user bins for this read, then (below)
+                // keep every user bin within 80% of that best count.
                 uint64_t max_count = 0;
                 for (auto && count : result)
                 {
@@ -380,6 +452,14 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
     
 }
 
+/*!\brief Runs search_single for every combination of query file and index file in config.
+ *
+ * Opens the shared TSV output file once (writing the header line), then loops over every
+ * query file and, for each one, every index file, running a fresh search against each. Note
+ * that this means each query file is searched independently against every index file (results
+ * are not merged/deduplicated across indexes).
+ * \param config The validated search configuration (see sanity_checks), taken by value.
+ */
 void search_hixf(taxor::search::configuration const config)
 {
     hixf::sync_out synced_out{config.report_file};
@@ -404,6 +484,14 @@ void search_hixf(taxor::search::configuration const config)
 
 
 
+/*!\brief Parses command-line arguments and runs the `taxor search` subcommand.
+ *
+ * Registers the subcommand's options, parses and validates them, then runs the search over
+ * all configured query/index file combinations. Argument-parsing/validation errors and any
+ * exception raised during the search itself are each caught separately and reported to stderr.
+ * \param parser The seqan3::argument_parser instance used to parse the subcommand's options.
+ * \return 0 on success, -1 if argument parsing/sanity checks fail or the search itself throws.
+ */
 int execute(seqan3::argument_parser & parser)
 {
     taxor::search::configuration config;

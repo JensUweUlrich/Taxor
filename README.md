@@ -256,8 +256,29 @@ OPTIONS
           output file reporting read to taxa assignments in CAMI binning format
     --sample-id (std::string)
           Identifier of the analyzed sample
+    --min-abundance (double)
+          Minimum abundance to report (default: 0.001) Default: 0.001. Value must be in range [0,1].
+    --em-steps (unsigned 16 bit integer)
+          The number of steps for the expectation maximization (EM) algorithm (default: 100). Default: 100. Value
+          must be in range [1,1000].
     --threads (unsigned 8 bit integer)
           The number of threads to use. Default: 1. Value must be in range [1,32].
+
+  SKiM classification options (only used with --classification-method skim):
+    --classification-method (std::string)
+          Read classification method: "em" (Taxor's own EM-based profiler, default) or "skim" (the
+          binomial-hypothesis-test classifier from Schneggenburger & Zola, "SKiM: accurately classifying metagenomic
+          ONT reads in limited memory"). Both can be run on the same --search-file (with different output files) to
+          compare them. Default: em. Value must be one of [em,skim].
+    --kmer-size (unsigned 8 bit integer)
+          k-mer size used when building the index (required for --classification-method skim; must match the value
+          used for taxor build/search). Default: 0. Value must be in range [1,64].
+    --skim-nfixed (unsigned 16 bit integer)
+          SKiM's fixed normalization sample size for the binomial test (default: 100, matching the paper). Default:
+          100. Value must be in range [1,100000].
+    --skim-cutoff-exponent (unsigned 16 bit integer)
+          SKiM's p-value cutoff, as a power of ten: cutoff = 10^-e (default: e=12, matching the paper). Default: 12.
+          Value must be in range [1,300].
 ```
 
 <b> search-file</b><br>
@@ -275,8 +296,71 @@ Output file reporting read to taxon assignments in CAMI binning format.
 <b> sample-id</b><br>
 String that identifies the analyzed sample.
 
+<b> min-abundance</b><br>
+Taxa below this relative abundance are omitted from the report and sequence-abundance files.
+
+<b> em-steps</b><br>
+Maximum number of iterations for the EM algorithm (only used with `--classification-method em`); EM stops earlier if the log-likelihood converges.
+
 <b> threads</b><br>
 Number of threads used for taxonomic profiling.
+
+#### <a name="skim"></a>SKiM classification method
+
+By default, `taxor profile` assigns reads to taxa with its own EM-based
+profiler: reference filtering (to suppress near-identical strain redundancy)
+followed by iterative expectation-maximization over posterior probabilities.
+Passing `--classification-method skim` switches to a second, independent
+classifier implementing the read-classification algorithm from
+[Schneggenburger & Zola, "SKiM: accurately classifying metagenomic ONT reads
+in limited memory"](https://pmc.ncbi.nlm.nih.gov/articles/PMC12502918/).
+Unlike the EM profiler, SKiM makes a single, direct statistical decision per
+read with no iterative refinement and no cross-read preprocessing: for every
+candidate reference it performs a binomial hypothesis test on the read's
+k-mer/syncmer match count, classifying the read to the reference with the
+lowest p-value (if it clears a cutoff), or leaving it unclassified otherwise.
+
+Both methods read the same `taxor search` output and write the same three
+CAMI-format output files, so they can be run back-to-back on the same
+`--search-file` (with different output paths) to compare them directly:
+
+```
+taxor profile --search-file sample.search.txt --classification-method em \
+    --cami-report-file sample.em.report --seq-abundance-file sample.em.abundance \
+    --binning-file sample.em.binning --sample-id sample
+
+taxor profile --search-file sample.search.txt --classification-method skim --kmer-size 20 \
+    --cami-report-file sample.skim.report --seq-abundance-file sample.skim.abundance \
+    --binning-file sample.skim.binning --sample-id sample
+```
+
+<b> kmer-size</b><br>
+Required for `--classification-method skim`. Must match the `--kmer-size` used for `taxor build`/`taxor search` on
+this index. SKiM's classification model needs the k-mer/syncmer universe size (derived from `kmer-size`) to compute
+each reference's match probability; there is no cheap way to read this back out of the index file, so it must be
+supplied explicitly.
+
+<b> skim-nfixed</b><br>
+SKiM normalizes each read's match count to a fixed number of trials (`n_fixed`) before the binomial test, so reads of
+different lengths are compared on the same scale. The paper's default is 100; larger values give the test more
+resolution for very long reads at the cost of a bigger per-reference precomputed probability table.
+
+<b> skim-cutoff-exponent</b><br>
+A read is classified to a reference only if that reference's binomial p-value is below `10^-e`. The paper's default,
+`e=12`, is intentionally strict (favoring precision over recall); lowering `e` classifies more reads at the risk of
+more false positives.
+
+**Notes on the implementation:** SKiM's model needs `p_i = |K_i|/|U|` (the fraction of the k-mer/syncmer universe
+covered by a reference's indexed k-mers), but Taxor's search output only records each reference's sequence length
+(`REF_LEN`), not its actual indexed k-mer/syncmer count. Since every reference in one index shares the same
+`kmer_size`/`syncmer_size`/scaling, the syncmer-selection-density and scaling factors are common to both a
+reference's true `|K_i|` and the universe size `|U|` and cancel out of the ratio, so Taxor approximates
+`p_i ≈ REF_LEN / (4^kmer_size / 2)`, using only `REF_LEN` (already available) and `--kmer-size`. This assumes roughly
+uniform k-mer density and non-repetitive references; repeat-rich genomes get a systematically more conservative
+(never more liberal) p-value as a result. Because SKiM is a direct per-read test with no cross-read signal, it
+intentionally skips the EM profiler's reference-filtering/strain-deduplication preprocessing, to stay faithful to the
+published method - this also means SKiM has no built-in defense against per-read assignment noise across
+near-identical strain references the way the EM path does.
 
 ## <a name="usage"></a>Usage
 

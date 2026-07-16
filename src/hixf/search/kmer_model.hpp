@@ -5,45 +5,62 @@
 #include <utility>
 #include <cstdlib>
 
+/*!\file kmer_model.hpp
+ * \brief Declares the k-mer-count statistical model used to compute confidence intervals for the number of
+ *        "mutated" (i.e. non-matching) k-mers of a query sequence under an assumed sequencing error rate.
+ *
+ * Based on "Statistics of kmers from a sequence undergoing a simple mutation process without spurious
+ * matches" by Blanca, A., Harris, R., Koslicki, D. and Medvedev, P. This model is used by
+ * hixf::threshold::threshold when every window of the query yields exactly one k-mer (i.e. no minimiser
+ * subsampling is applied), so the full k-mer-based mutation statistics apply directly.
+ */
 namespace hixf::threshold
 {
 
     typedef std::pair<size_t, size_t> TInterval;
 
-    /**
-    *   calculates the expected number of errorneous kmers based on read length, kmer size and error rate
-    *   based on "statistics of kmers from a sequence undergoing a simple mutation process without spurious matches" 
-    *   by Blanca, A., Harris, R., Koslicki, D. and Medvedev, P.
-    *   @r double          : assumed sequencing error rate 
-    *   @kmer_size size_t  : size of kmers used
-    *   @kmer_count size_t : number of kmers of a given query sequence
-    *   @return double     : expected number of errornous kmers
-    */
+    /*!\brief Calculates the expected number of erroneous kmers based on kmer size, kmer count and error rate.
+     *
+     * Based on "Statistics of kmers from a sequence undergoing a simple mutation process without spurious
+     * matches" by Blanca, A., Harris, R., Koslicki, D. and Medvedev, P.
+     * \param r          Assumed sequencing/mutation error rate (per-base probability of a mismatch).
+     * \param kmer_size  Size of kmers used.
+     * \param kmer_count Number of kmers of a given query sequence.
+     * \return Expected number of erroneous (mutated) kmers.
+     */
     double expected_nmut_kmer(double r, size_t kmer_size, size_t kmer_count);
 
+    /*!\brief Calculates the second moment (square of expectation plus variance) of the number of erroneous kmers.
+     * \param r          Assumed sequencing/mutation error rate.
+     * \param kmer_size  Size of kmers used.
+     * \param kmer_count Number of kmers of a given query sequence.
+     * \return E[N^2] for the number of mutated kmers N, i.e. E[N]^2 + Var[N].
+     */
     double expected_nmut_kmer_squared(double r, size_t kmer_size, size_t kmer_count);
 
-    /**
-    *   calculates the variance of errorneous kmers based on read length, kmer size and error rate
-    *   based on "statistics of kmers from a sequence undergoing a simple mutation process without spurious matches" 
-    *   by Blanca, A., Harris, R., Koslicki, D. and Medvedev, P.
-    *   @r double          : assumed sequencing error rate 
-    *   @kmer_size size_t  : size of kmers used
-    *   @kmer_count size_t : number of kmers of a given query sequence
-    *   @return double     : variance in the number of errornous kmers
-    */
+    /*!\brief Calculates the variance of erroneous kmers based on kmer size, kmer count and error rate.
+     *
+     * Based on "Statistics of kmers from a sequence undergoing a simple mutation process without spurious
+     * matches" by Blanca, A., Harris, R., Koslicki, D. and Medvedev, P.
+     * \param r          Assumed sequencing/mutation error rate.
+     * \param kmer_size  Size of kmers used.
+     * \param kmer_count Number of kmers of a given query sequence.
+     * \return Variance in the number of erroneous kmers.
+     */
     double variance_nmut_kmer(double r, size_t kmer_size, size_t kmer_count);
 
 
-    /**
-    *   calculates the confidence interval for the number of errorneous kmers based on read length, kmer size and error rate
-    *   based on "statistics of kmers from a sequence undergoing a simple mutation process without spurious matches" 
-    *   by Blanca, A., Harris, R., Koslicki, D. and Medvedev, P.
-    *   @r          : assumed sequencing error rate 
-    *   @kmer_size  : size of kmers used
-    *   @kmer_count : number of kmers of a given query sequence
-    *   @confidence : significance level, e.g. 0.95 for a 95% confidence interval
-    *   @return     : pair of integer values representing the boundaries of the confidence interval 
-    */
+    /*!\brief Calculates the confidence interval for the number of erroneous kmers based on kmer size, kmer
+     *        count and error rate.
+     *
+     * Based on "Statistics of kmers from a sequence undergoing a simple mutation process without spurious
+     * matches" by Blanca, A., Harris, R., Koslicki, D. and Medvedev, P.
+     * \param r          Assumed sequencing/mutation error rate.
+     * \param kmer_size  Size of kmers used.
+     * \param kmer_count Number of kmers of a given query sequence.
+     * \param confidence Significance level, e.g. 0.95 for a 95% confidence interval.
+     * \return Pair (low, high) giving the integer-rounded lower and upper bounds of the confidence interval
+     *         for the number of erroneous kmers.
+     */
     TInterval calculate_nmut_kmer_CI(double r, size_t kmer_size, size_t kmer_count, double confidence);
 }

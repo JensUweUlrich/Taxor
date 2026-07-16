@@ -9,6 +9,11 @@
 
 #include <random>
 
+/*!\file hashutil.hpp
+ * \brief Small hashing utilities used by the XOR filter implementation (see xorfilter.hpp) to
+ *        derive well-distributed, seeded 64-bit hash values from 64-bit keys.
+ */
+
 namespace hashing {
 // See Martin Dietzfelbinger, "Universal hashing and k-wise independent random
 // variables via integer arithmetic without primes".
@@ -32,14 +37,22 @@ class TwoIndependentMultiplyShift {
   inline uint64_t operator()(uint64_t key) const {
     return (add_ + multiply_ * static_cast<decltype(multiply_)>(key)) >> 64;
   }
-  
+
 };
 */
 
+/*!\brief A seeded 64-bit hash functor based on a MurmurHash3-style 64-bit mixer.
+ *
+ * On construction, a random 64-bit seed is drawn from std::random_device (two 32-bit draws
+ * combined into one 64-bit value), so that different SimpleMixSplit instances (e.g. one per hash
+ * function slot of the XOR filter) produce independent-looking hash sequences for the same key.
+ * Used as the default HashFamily for the XOR filter (see xorfilter.hpp).
+ */
 class SimpleMixSplit {
 
  public:
-  uint64_t seed;
+  uint64_t seed; //!< Random seed mixed into every hashed key, drawn once per instance.
+  //!\brief Draws a random 64-bit seed from std::random_device.
   SimpleMixSplit() {
     ::std::random_device random;
     seed = random();
@@ -47,6 +60,10 @@ class SimpleMixSplit {
     seed |= random();
   }
 
+  /*!\brief 64-bit MurmurHash3 finalizer-style bit mixer.
+   * \param h Input value to mix.
+   * \return A well-distributed 64-bit hash of \p h.
+   */
   inline static uint64_t murmur64(uint64_t h) {
     h ^= h >> 33;
     h *= UINT64_C(0xff51afd7ed558ccd);
@@ -56,6 +73,10 @@ class SimpleMixSplit {
     return h;
   }
 
+  /*!\brief Hashes \p key, mixed with this instance's random seed.
+   * \param key The key to hash.
+   * \return A seeded 64-bit hash of \p key.
+   */
   inline uint64_t operator()(uint64_t key) const {
     return murmur64(key + seed);
   }

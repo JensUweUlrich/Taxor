@@ -11,9 +11,24 @@
 #include <future>
 #include <vector>
 
+/*!\file do_parallel.hpp
+ * \brief A small helper that splits a range of record indices into contiguous chunks and dispatches one
+ *        chunk per thread via std::async, used to parallelise search work across query/reference records.
+ */
 namespace hixf
 {
 
+/*!\brief Splits [0, num_records) into \p threads contiguous chunks and runs \p worker on each chunk in
+ *        parallel, accumulating the elapsed wall-clock time.
+ * \tparam algorithm_t Callable type invoked as `worker(start, end)` for each chunk.
+ * \param worker       The callable to run per chunk; receives the chunk's [start, end) index range.
+ * \param num_records  Total number of records to distribute across threads.
+ * \param threads      Number of chunks/threads to split the work into.
+ * \param compute_time Accumulator that the elapsed wall-clock time of this call is added to.
+ *
+ * Chunk sizes are `num_records / threads`, except the last chunk which additionally absorbs the remainder
+ * so that every record is covered even when \p num_records is not evenly divisible by \p threads.
+ */
 template <typename algorithm_t>
 void do_parallel(algorithm_t && worker, size_t const num_records, size_t const threads, double & compute_time)
 {

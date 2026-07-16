@@ -19,10 +19,17 @@
 namespace hixf
 {
 
+/*!\file parse_chopper_pack_header.cpp
+ * \brief Implements hixf::parse_chopper_pack_header.
+ */
+
+//!\brief See parse_chopper_pack_header.hpp for documentation.
 size_t parse_chopper_pack_header(lemon::ListDigraph & ixf_graph,
                                  lemon::ListDigraph::NodeMap<node_data> & node_map,
                                  std::istream & chopper_pack_file)
 {
+    // Parses a ';'-separated chain of technical bin indices (e.g. "3;1;0") describing a merged bin's path
+    // from the root down to itself, one index per hierarchy level.
     auto parse_bin_indices = [](std::string_view const & buffer)
     {
         std::vector<size_t> result;
@@ -42,6 +49,7 @@ size_t parse_chopper_pack_header(lemon::ListDigraph & ixf_graph,
         return result;
     }; // GCOVR_EXCL_LINE
 
+    // Parses a single trailing integer, e.g. the value after a "max_bin_id:" label.
     auto parse_first_bin = [](std::string_view const & buffer)
     {
         size_t tmp{};
@@ -61,6 +69,7 @@ size_t parse_chopper_pack_header(lemon::ListDigraph & ixf_graph,
 
     // parse High Level max bin index
     assert(line.substr(hixf_prefix.size() + 2, 11) == "max_bin_id:");
+    // Offset 27 = len("#HIGH_LEVEL_IBF max_bin_id:") = 1 ('#') + hixf_prefix.size() + 1 (' ') + 11 ("max_bin_id:").
     std::string_view const hixf_max_bin_str{line.begin() + 27, line.end()};
     auto high_level_node = ixf_graph.addNode(); // high-level node = root node
     

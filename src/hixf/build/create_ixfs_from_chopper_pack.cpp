@@ -21,9 +21,14 @@
 namespace hixf
 {
 
+/*!\file create_ixfs_from_chopper_pack.cpp
+ * \brief Implements hixf::create_ixfs_from_chopper_pack.
+ */
+
+//!\brief See create_ixfs_from_chopper_pack.hpp for documentation.
 //template <seqan3::data_layout data_layout_mode>
 void create_ixfs_from_chopper_pack(build_data& data, build_arguments const & arguments)
-{   
+{
 
     read_chopper_pack_file(data, arguments.bin_file);
 
@@ -32,6 +37,7 @@ void create_ixfs_from_chopper_pack(build_data& data, build_arguments const & arg
 
     size_t const t_max{data.node_map[root].number_of_technical_bins};
 
+    // Kick off the recursive build at the root; is_root=true, is_second=false, is_third=false.
     hierarchical_build(root_hashes, root, data, arguments, true, false, false);
 
     /*

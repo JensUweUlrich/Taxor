@@ -34,6 +34,16 @@
 
 using namespace seqan3::literals;
 
+/*!\file main.cpp
+ * \brief Top-level entry point of the taxor executable: parses the global CLI
+ * (which of the `build`, `search`, `profile` subcommands to run) and dispatches
+ * to the corresponding subcommand's `execute()`, then reports CPU time and peak
+ * memory usage.
+ */
+
+/*!\brief Return the process' cumulative CPU time (user + system) in seconds since start.
+ * \return CPU time in seconds, as a floating point value with microsecond resolution.
+ */
 double cputime(void)
 {
 	struct rusage r;
@@ -41,6 +51,9 @@ double cputime(void)
 	return r.ru_utime.tv_sec + r.ru_stime.tv_sec + 1e-6 * (r.ru_utime.tv_usec + r.ru_stime.tv_usec);
 }
 
+/*!\brief Return the process' peak resident set size (maximum memory used so far).
+ * \return Peak RSS in bytes.
+ */
 long getPeakRSS(void)
 {
 	struct rusage r;
@@ -48,6 +61,14 @@ long getPeakRSS(void)
 	return r.ru_maxrss * 1024;
 }
 
+/*!\brief Program entry point: parses the top-level `taxor` argument parser and
+ * dispatches to the `build`, `search`, or `profile` subcommand, then prints
+ * CPU time and peak RSS to stdout.
+ * \param argc Argument count, forwarded to seqan3::argument_parser.
+ * \param argv Argument vector, forwarded to seqan3::argument_parser.
+ * \return The error code returned by the executed subcommand (0 on success,
+ * -1 on a CLI parsing error, or the subcommand's own error code).
+ */
 int main(int argc, char const **argv)
 {
 
@@ -69,11 +90,15 @@ int main(int argc, char const **argv)
 
     int error_code{};
 
+    // dispatch to the subcommand selected on the command line; seqan3::argument_parser
+    // already restricts app_name to one of "build"/"search"/"profile", so exactly one
+    // branch below is taken
     if (sub_parser.info.app_name == std::string_view{"taxor-build"})
         error_code = taxor::build::execute(sub_parser);
     else if (sub_parser.info.app_name == std::string_view{"taxor-search"})
         error_code = taxor::search::execute(sub_parser);
 	else if (sub_parser.info.app_name == std::string_view{"taxor-profile"})
+        // taxor_profile.hpp is documented separately; only invoked here.
         error_code = taxor::profile::execute(sub_parser);
 
 	size_t peakSize = getPeakRSS();

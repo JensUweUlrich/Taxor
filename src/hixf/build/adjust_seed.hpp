@@ -19,9 +19,10 @@
 namespace hixf
 {
 
-/*\brief Adjust the default seed such that it does not interfere with the IXF's hashing.
+/*!\brief Adjust the default seed such that it does not interfere with the IXF's hashing.
  *\param kmer_size The used k-mer size. For gapped shapes, this corresponds to the number of set bits (count()).
- *\param seed The seed.
+ *\param seed The seed to adjust. Defaults to a fixed 64 bit constant.
+ *\return The seed, right-shifted so that only the bits actually affected by `kmer_size`-mers remain significant.
  *\details
  *
  * The hashing used with the IXF assumes that the input values are uniformly distributed.

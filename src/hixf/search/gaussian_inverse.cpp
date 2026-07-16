@@ -3,12 +3,21 @@
 #include <sstream>
 #include <cmath>
 
+/*!\file gaussian_inverse.cpp
+ * \brief Implements a rational-function approximation of the inverse standard normal CDF (Abramowitz &
+ *        Stegun formula 26.2.23), used to convert confidence levels into z-scores for the threshold models.
+ */
 namespace hixf::threshold
 {
 
-    /**
-    *   Abramowitz-Stegun-Approximation for the inverse normal CDF
-    */
+    /*!\brief Abramowitz-Stegun rational approximation used as a building block of the inverse normal CDF.
+     *
+     * Implements Abramowitz and Stegun formula 26.2.23, a well-known rational-function approximation with
+     * an absolute error less than 4.5e-4. It is not the inverse normal CDF itself; NormalCDFInverse() calls
+     * it with a suitably transformed argument depending on which tail of the distribution \c p falls in.
+     * \param t Transformed input, sqrt(-2 * log(x)) for the appropriate tail probability x.
+     * \return Approximate value of the standard normal quantile function for that tail.
+     */
     double RationalApproximation(double t)
     {
         // Abramowitz and Stegun formula 26.2.23.
@@ -20,14 +29,14 @@ namespace hixf::threshold
             (((d[2] * t + d[1]) * t + d[0]) * t + 1.0);
     }
 
-    /**
-    *   approximates the value of the inverse normal cumulative distribution function
-    *   @p      : probability, has to be between 0 and 1
-    *   @return : z score
-    */
+    /*!\brief Approximates the value of the inverse normal cumulative distribution function (probit function).
+     * \param p Probability, must be strictly between 0 and 1.
+     * \return The z score z such that Phi(z) = p, where Phi is the standard normal CDF.
+     * \throws std::invalid_argument if p is not in the open interval (0, 1).
+     */
     double NormalCDFInverse(double p)
     {
-        
+
         if (p <= 0.0 || p >= 1.0)
         {
             std::stringstream os;
@@ -47,7 +56,7 @@ namespace hixf::threshold
             // F^-1(p) = G^-1(1-p)
             //std::cout << "RationalApproximation(sqrt(-2.0 * log(1.0 - p))) is: " << RationalApproximation(sqrt(-2.0 * log(1.0 - p))) << std::endl;
             return RationalApproximation(sqrt(-2.0 * log(1.0 - p)));
-            
+
         }
     }
 

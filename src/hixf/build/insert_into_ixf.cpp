@@ -9,7 +9,11 @@
 namespace hixf
 {
 
-// automatically does naive splitting if number_of_bins > 1
+/*!\file insert_into_ixf.cpp
+ * \brief Implements the hixf::insert_into_ixf overloads.
+ */
+
+//!\brief See insert_into_ixf.hpp for documentation. Automatically does naive splitting if number_of_bins > 1.
 void insert_into_ixf(ankerl::unordered_dense::set<size_t> & parent_hashes,
                      ankerl::unordered_dense::set<size_t> const & hashes,
                      size_t const number_of_bins,
@@ -42,6 +46,7 @@ void insert_into_ixf(ankerl::unordered_dense::set<size_t> & parent_hashes,
 }
 
 
+//!\brief See insert_into_ixf.hpp for documentation. @deprecated: no current call sites in this codebase.
 void insert_into_ixf(build_arguments const & arguments,
                      chopper_pack_record const & record,
                      seqan3::interleaved_xor_filter<> & ixf)

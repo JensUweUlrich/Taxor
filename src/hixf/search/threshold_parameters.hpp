@@ -12,9 +12,20 @@
 
 #include <seqan3/search/kmer_index/shape.hpp>
 
+/*!\file threshold_parameters.hpp
+ * \brief Declares the parameter struct used to configure hixf::threshold::threshold, i.e. which statistical
+ *        model is used to compute the match-count threshold for a search run and with which parameters.
+ */
 namespace hixf
 {
 
+/*!\brief Plain aggregate of parameters that determine which threshold model hixf::threshold::threshold
+ *        selects and how it computes the match-count threshold.
+ *
+ * Populated from search_arguments::make_threshold_parameters(). Fields are grouped by which threshold_kind
+ * they are relevant for (see hixf::threshold::threshold::threshold_kinds); unused fields for a given kind
+ * are simply ignored.
+ */
 struct threshold_parameters
 {
     // Basic.
@@ -38,4 +49,4 @@ struct threshold_parameters
     std::filesystem::path output_directory{};
 };
 
-} 
+}

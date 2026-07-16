@@ -9,8 +9,13 @@
 namespace hixf
 {
 
+/*!\file construct_ixf.cpp
+ * \brief Implements the hixf::construct_ixf overloads that assemble the interleaved XOR filter for one IXF-tree
+ *        node from its bins' hash sets.
+ */
+
 //template <seqan3::data_layout data_layout_mode>
-// @deprecated
+// @deprecated: no call sites in the current codebase; see construct_ixf.hpp for details.
 seqan3::interleaved_xor_filter<> construct_ixf(ankerl::unordered_dense::set<size_t> & parent_hashes,
                                                  ankerl::unordered_dense::set<size_t> & hashes,
                                                  size_t const number_of_bins,
@@ -32,6 +37,7 @@ seqan3::interleaved_xor_filter<> construct_ixf(ankerl::unordered_dense::set<size
     return ixf;
 }
 
+//!\brief See construct_ixf.hpp for documentation.
 seqan3::interleaved_xor_filter<> construct_ixf(std::vector<ankerl::unordered_dense::set<size_t>> &node_hashes)
 {
     std::vector<std::vector<size_t>> tmp{};
@@ -47,7 +53,8 @@ seqan3::interleaved_xor_filter<> construct_ixf(std::vector<ankerl::unordered_den
 }
 
 
-seqan3::interleaved_xor_filter<> construct_ixf(build_data & data, 
+//!\brief See construct_ixf.hpp for documentation.
+seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
                                                lemon::ListDigraph::Node const & current_node,
                                                std::vector<int64_t> & ixf_positions,
                                                bool is_second,
@@ -60,6 +67,9 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
     
     bool success{false};
 
+    // bins: maps each merged-bin's technical bin index (at this level) to the temp-file position where its
+    // child IXF's accumulated hash set was written (see create_temp_hash_file / hierarchical_build). All other
+    // bin indices of this node are populated below from current_node_ixf_pos instead.
     std::map<size_t, int64_t> bins{};
     for (lemon::ListDigraph::OutArcIt arc_it(data.ixf_graph, current_node); arc_it != lemon::INVALID; ++arc_it)
     {
@@ -77,6 +87,8 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
             
            
 
+    // XOR filter construction is randomized and can fail for a given seed/element assignment; on failure the
+    // whole filter is cleared, reseeded, and every bin is re-inserted from scratch until construction succeeds.
     while (!success)
     {
         success = true;
@@ -147,6 +159,9 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
         
     }
 
+    // At one level below root, the combined hash set of this node's IXF is itself spilled to a temp file
+    // (rather than kept in memory) so that the root-level build can later read it back per merged bin,
+    // bounding peak memory when the hierarchy is deep.
     if (is_second)
     {
         current_node_data.number_of_hashes = hashset.size();
@@ -154,7 +169,7 @@ seqan3::interleaved_xor_filter<> construct_ixf(build_data & data,
         create_temp_hash_file(current_node_ixf_pos, hashset);
         hashset.clear();
     }
-    
+
     for (auto &file : tmp_files)
     {
         if (std::filesystem::exists(file))

@@ -15,15 +15,28 @@
 
 #include "threshold_parameters.hpp"
 
+/*!\file search_arguments.hpp
+ * \brief Declares search_arguments, the runtime configuration struct passed through the HIXF search
+ *        pipeline (parsed from command-line arguments), plus the small helper type pattern_size.
+ */
 namespace hixf
 {
 
 // For costum default message in argparser
+/*!\brief Wrapper around a uint64_t pattern size, used so the argument parser can display a custom default
+ *        message (e.g. "read length") instead of a plain numeric default.
+ */
 struct pattern_size
 {
     uint64_t v{};
 };
 
+/*!\brief Runtime configuration for a HIXF search run: k-mer/syncmer parameters, threshold-selection
+ *        parameters, index/query file paths, and general output options.
+ *
+ * Instances are typically populated from command-line arguments and then passed to the search pipeline;
+ * make_threshold_parameters() extracts the subset of fields relevant to threshold selection.
+ */
 struct search_arguments
 {
     // Related to k-mers
@@ -59,6 +72,11 @@ struct search_arguments
     bool is_hixf{true};
     bool cache_thresholds{false};
 
+    /*!\brief Extracts the subset of these arguments relevant to threshold-model selection into a
+     *        threshold_parameters instance.
+     * \return A threshold_parameters populated from this search_arguments' k-mer/window/error-rate/output
+     *         settings, ready to construct a hixf::threshold::threshold with.
+     */
     hixf::threshold_parameters make_threshold_parameters() noexcept
     {
         return hixf::threshold_parameters{window_size,

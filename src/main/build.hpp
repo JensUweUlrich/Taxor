@@ -1,5 +1,16 @@
 
 
+/*!\file build.hpp
+ * \brief Alternate/earlier implementation for building a "multi interleaved XOR filter" (multi-IXF) index
+ *        directly from a GTDB genome repository layout, using per-species syncmer sets as filter bins.
+ *
+ * \details Not currently compiled into the taxor binary — build.hpp is not #include'd by anything reachable
+ *          from main.cpp as of this writing. The index-building path that is actually used lives elsewhere
+ *          (see taxor_build.hpp); this file is retained for reference but has no effect on the running tool.
+ *          Because it is unreachable, multi_interleaved_xor_filter.hpp, Semaphore.hpp and SafeMap.hpp are
+ *          also only reachable transitively through this file, i.e. effectively dead code as well.
+ */
+
 #ifndef build_hpp
 #define build_hpp
 
@@ -16,30 +27,35 @@
 
 
 
+//!\brief A single loaded reference sequence together with its FASTA/FASTQ record identifier.
 struct Seqs {
-	
+
 	std::string       seqid;
 	seqan3::dna5_vector seq;
-	
+
 };
 
+//!\brief Maps a genome/taxon identifier to the list of Species records associated with it.
 typedef std::map<std::string, std::vector<Species>> TGenMap;
 
-// has to be x % 100 = 0 
-uint64_t max_bins_per_filter = 4300;
-uint64_t breakpoint = 22000;
+// has to be x % 100 = 0
+uint64_t max_bins_per_filter = 4300; //!< Upper limit on the number of bins packed into a single interleaved XOR filter.
+uint64_t breakpoint = 22000; //!< Declared but not referenced anywhere else in this file or the wider source tree.
 
+/*!\brief Extract the sequence identifier (the portion of a FASTA/FASTQ header before the first space) from a full header line.
+ * \param header The full header line as read from the sequence file.
+ * \return The header substring up to (excluding) the first space character.
+ */
 inline std::string get_seqid( std::string header )
 {
     return header.substr( 0, header.find( ' ' ) );
 }
 
-/**
-   * split underlying sequence based on stretches of N's
-   * @seq      : reference sequence as a string
-   * @seqlen   : length of the sequence
-   * @return   : vector of subsequences, that results from splitting the original sequence
-   */
+/*!\brief Split a sequence into subsequences by cutting out stretches of 'N' characters.
+ * \param seq    Reference sequence as a string.
+ * \param seqlen Length of the sequence.
+ * \return Vector of subsequences that results from splitting the original sequence at runs of 'N'.
+ */
  std::vector<std::string> cutOutNNNs(std::string& seq, uint64_t seqlen)
  {
 	 std::vector<std::string> splittedStrings;
@@ -63,13 +79,11 @@ inline std::string get_seqid( std::string header )
  }
 
 
- /**
-	   read reference sequences from files and store them in reference sequence queue
-	   @queue_refs:    thread safe queue that stores reference sequences to put in the ibf
-	   @config:        settings used to build the IBF (reference file path, number of references, kmer size, fragment length)
-	   @stats:         statistics (like runtime for specific tasks) for building the ibf
-	   @throws:        FileParserException
-   */
+ /*!\brief Read reference sequences from a (possibly gzip-compressed) sequence file, strip out 'N' runs, and
+  *        append the cleaned records to \p queue_refs.
+  * \param queue_refs     Output vector that reference sequences are appended to.
+  * \param reference_file Path to the reference sequence file (FASTA/FASTQ, gzip-compatible via seqan3 I/O).
+  */
 
  void parse_ref_seqs(std::vector< Seqs >& queue_refs, const std::filesystem::path& reference_file)
  {
@@ -102,6 +116,22 @@ inline std::string get_seqid( std::string header )
 			 
  }
 
+ /*!\brief For a contiguous batch of species [start_species, end_species), load each species' reference genome(s)
+  *        from the GTDB directory layout, compute its syncmer set, and derive how many IXF bins it will need.
+  *
+  * \details For every species the genome file is located under \p gtdb_root using the GTDB GCA/GCF accession-based
+  *          directory scheme, all sequences of the genome are read and their syncmer hashes are collected into a
+  *          single deduplicated std::set. The number of bins required for a species is the syncmer-set size divided
+  *          by 100000 (rounded up by the +1), i.e. bins hold at most 100000 hashes each.
+  * \param species      Full species vector (only entries in [start_species, end_species) are processed).
+  * \param start_species Index of the first species in this batch (inclusive).
+  * \param end_species   Index one past the last species in this batch (exclusive).
+  * \param gtdb_root    Root directory of the local GTDB genome repository.
+  * \param kmer_size    k-mer size used for syncmer extraction.
+  * \param sync_size    Syncmer window/s-mer size used for syncmer extraction.
+  * \param t_syncmer    Syncmer parameter t (open/closed syncmer position threshold) used for syncmer extraction.
+  * \return Vector of (species_index, bins_needed) pairs, one per processed species.
+  */
  std::vector<std::pair<uint64_t, uint64_t>> compute_bin_number_per_species_batch(const std::vector<Species>& species, uint64_t start_species, uint64_t end_species,
  											   const std::string& gtdb_root, int kmer_size, int sync_size, int t_syncmer)
  {
@@ -142,7 +172,23 @@ inline std::string get_seqid( std::string header )
 
  }
 
-std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> compute_bin_numbers(std::vector<Species>& species, const std::string& gtdb_root, 
+/*!\brief Compute, for the whole species collection, how species are grouped into separate interleaved XOR filters
+ *        so that no filter exceeds \c max_bins_per_filter bins, and assign each species its filter index and bin range.
+ *
+ * \details The species vector is split into batches of 100 and processed concurrently, throttled to at most 6
+ *          simultaneous batches via a Semaphore, each batch computed by compute_bin_number_per_species_batch().
+ *          After all batches finish, the per-species bin counts are walked in order; species are packed
+ *          greedily into the current filter until adding the next species would exceed \c max_bins_per_filter,
+ *          at which point a new filter is started. As a side effect this sets each processed species'
+ *          \c filter_index, \c first_bin and \c last_bin members.
+ * \param species    Species vector to assign filter/bin ranges to (modified in place).
+ * \param gtdb_root  Root directory of the local GTDB genome repository.
+ * \param kmer_size  k-mer size used for syncmer extraction.
+ * \param sync_size  Syncmer window/s-mer size used for syncmer extraction.
+ * \param t_syncmer  Syncmer parameter t used for syncmer extraction.
+ * \return Vector of (bins_in_filter, first_species_index, end_species_index) tuples, one per filter to be built.
+ */
+std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> compute_bin_numbers(std::vector<Species>& species, const std::string& gtdb_root,
 										  int kmer_size, int sync_size, int t_syncmer)
 {
 	std::vector<std::future<std::vector<std::pair<uint64_t, uint64_t>>>> future_store{};
@@ -222,9 +268,32 @@ std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> compute_bin_numbers(std::v
 }
 
 
+/*!\brief Populate one interleaved XOR filter with the syncmer hashes of a contiguous range of species.
+ *
+ * \details For each species in [start_species_index, end_species_index), the reference genome is loaded from the
+ *          GTDB directory layout, its syncmer hashes are collected into a deduplicated, ordered set, then split
+ *          into chunks of at most 100000 hashes; each chunk is added as one bin via \c ixf.add_bin_elements().
+ *          Bin indices are assigned sequentially starting from 0 and are shared across all species processed by
+ *          this call, so a species may span multiple consecutive bins. On success each species' \c filter_index,
+ *          \c first_bin and \c last_bin members are updated (under \p filter_mutex). If \c add_bin_elements() ever
+ *          fails (e.g. the underlying XOR filter construction fails to converge for the chosen seed), processing
+ *          of this batch stops immediately and failure is reported so the caller can retry with a new seed.
+ * \param species_vec        Full species vector; only entries in [start_species_index, end_species_index) are touched.
+ * \param start_species_index Index of the first species to add (inclusive).
+ * \param end_species_index   Index one past the last species to add (exclusive).
+ * \param gtdb_root   Root directory of the local GTDB genome repository.
+ * \param kmer_size   k-mer size used for syncmer extraction.
+ * \param sync_size   Syncmer window/s-mer size used for syncmer extraction.
+ * \param t_syncmer   Syncmer parameter t used for syncmer extraction.
+ * \param filter_mutex Mutex guarding both console output and updates to shared \p species_vec entries.
+ * \param ixf         The interleaved XOR filter that bins are added to.
+ * \param filter_index Index of \p ixf among all filters being built; only used for logging/bookkeeping.
+ * \param terminate   Unused by the current implementation (accepted but never read or written).
+ * \return Pair of (filter_index, success) — success is false if any \c add_bin_elements() call failed.
+ */
 std::pair<uint16_t, bool> add_species_to_filter(std::vector<Species>& species_vec, const uint64_t start_species_index,
  						   const uint64_t end_species_index, const std::string& gtdb_root, int kmer_size,
-						   int sync_size, int t_syncmer, std::mutex& filter_mutex, 
+						   int sync_size, int t_syncmer, std::mutex& filter_mutex,
 						   seqan3::interleaved_xor_filter<>& ixf,
 						   uint16_t filter_index, bool* terminate)
 {
@@ -269,6 +338,8 @@ std::pair<uint16_t, bool> add_species_to_filter(std::vector<Species>& species_ve
 		if (spec == 306)
 			std::cout << syncmers.size() << std::endl;
 		uint64_t first_species_bin = bin;
+		// split this species' syncmer set into chunks of at most 100000 hashes, one IXF bin per chunk;
+		// the final chunk is clamped to sync_vec.end() since syncmers.size() is not necessarily a multiple of 100000
 		for (int j = 0; j < (syncmers.size() / 100000) + 1 ; j++)
 		{
 
@@ -308,9 +379,30 @@ std::pair<uint16_t, bool> add_species_to_filter(std::vector<Species>& species_ve
 	return std::make_pair(filter_index, success);
 }
 
+/*!\brief Top-level driver that builds a full multi-IXF index for a species collection and serialises it to disk.
+ *
+ * \details Work proceeds in three phases:
+ *          1. compute_bin_numbers() determines how species are grouped across separate interleaved XOR filters
+ *             and how many bins each filter needs;
+ *          2. one interleaved_xor_filter is allocated per group via multi_interleaved_xor_filter::add_filter(),
+ *             then one async task per filter (throttled to 6 concurrent via Semaphore) populates its bins by
+ *             calling add_species_to_filter(); filters whose construction fails (add_bin_elements() returning
+ *             false, e.g. XOR-filter peeling not converging) are cleared, reseeded via set_seed(), and
+ *             resubmitted until they succeed;
+ *          3. the finished multi_interleaved_xor_filter (including the species vector) is serialised to
+ *             \p filter_file using a cereal binary archive.
+ * \param species     Species collection to index; ownership is moved into the returned filter's species_vector.
+ * \param filter_file  Output path for the serialised multi-IXF binary archive.
+ * \param bin_meta_file Accepted but not used by the current implementation.
+ * \param gtdb_root   Root directory of the local GTDB genome repository.
+ * \param kmer_size   k-mer size used for syncmer extraction.
+ * \param sync_size   Syncmer window/s-mer size used for syncmer extraction.
+ * \param t_syncmer   Syncmer parameter t used for syncmer extraction.
+ * \return The fully populated multi_interleaved_xor_filter (also written to \p filter_file as a side effect).
+ */
 multi_interleaved_xor_filter build_ixf_index(std::vector<Species>& species, const std::string& filter_file, const std::filesystem::path& bin_meta_file,
                      const std::string& gtdb_root, int kmer_size, int sync_size, int t_syncmer)
-{	
+{
 	//<number of bins, first_species_index, last_species_index>
     std::vector<std::tuple<uint64_t, uint64_t, uint64_t>> filter_bins = compute_bin_numbers(std::ref(species), gtdb_root,
 																			kmer_size, sync_size, t_syncmer);
@@ -323,12 +415,14 @@ multi_interleaved_xor_filter build_ixf_index(std::vector<Species>& species, cons
 		mixf.add_filter(f_index, std::get<0>(fb), 100000);
 		++f_index;
 	}
-	
-	
+
+
 	Semaphore max_threads(6);
 	std::mutex filter_mutex{};
+	// note: this raw allocation is never delete'd, and the pointee is never read/written by
+	// add_species_to_filter(), which is the only function it is passed to
 	bool* terminate = new bool(false);
-	
+
 	uint64_t species_counter = 0;
 	std::vector<bool> finished_filter(filter_bins.size());
 	std::fill(finished_filter.begin(), finished_filter.end(), false);
@@ -399,6 +493,10 @@ multi_interleaved_xor_filter build_ixf_index(std::vector<Species>& species, cons
 	return std::move(mixf);
 }
 
+/*!\brief Deserialise a multi_interleaved_xor_filter previously written by build_ixf_index() from a cereal binary archive.
+ * \param filter_file Path to the serialised multi-IXF binary archive.
+ * \return The deserialised multi_interleaved_xor_filter.
+ */
 multi_interleaved_xor_filter load_multi_ixf_index(const std::string& filter_file)
 {
 	multi_interleaved_xor_filter mixf{};

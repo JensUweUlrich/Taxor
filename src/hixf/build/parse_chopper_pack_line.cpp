@@ -15,6 +15,11 @@
 namespace hixf
 {
 
+/*!\file parse_chopper_pack_line.cpp
+ * \brief Implements hixf::parse_chopper_pack_line.
+ */
+
+//!\brief See parse_chopper_pack_line.hpp for documentation.
 chopper_pack_record parse_chopper_pack_line(std::string const & current_line)
 {
     chopper_pack_record result{};
@@ -26,7 +31,7 @@ chopper_pack_record parse_chopper_pack_line(std::string const & current_line)
     while (field_end != buffer_end && *field_end != '\t')
         ++field_end;
 
-    // parse filenames
+    // parse filenames (';'-separated); resolve symlinks so downstream code always sees real file paths
     std::string_view const filenames{buffer.begin(), field_end};
     for (auto const && filename : filenames | std::views::split(';'))
     {

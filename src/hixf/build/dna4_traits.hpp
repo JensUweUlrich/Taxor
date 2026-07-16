@@ -12,9 +12,21 @@
 namespace hixf
 {
 
+/*!\file dna4_traits.hpp
+ * \brief Provides hixf::dna4_traits.
+ */
+
+/*!\brief seqan3::sequence_file_input traits that read sequences using the 4-letter (A/C/G/T) DNA alphabet.
+ * \details
+ *
+ * The default seqan3 traits use the 5-letter seqan3::dna5 alphabet (which also allows 'N'). Reading with
+ * seqan3::dna4 instead is used where ambiguous bases are not needed and a more compact in-memory
+ * representation is preferred (e.g. minimiser hashing in hixf::compute_hashes).
+ */
 struct dna4_traits : seqan3::sequence_file_input_default_traits_dna
 {
+    //!\brief The alphabet used to represent sequence characters; overrides the seqan3::dna5 default.
     using sequence_alphabet = seqan3::dna4;
 };
 
-} 
+}

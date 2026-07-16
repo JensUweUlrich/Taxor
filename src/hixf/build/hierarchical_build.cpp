@@ -20,9 +20,15 @@
 
 namespace hixf
 {
+
+/*!\file hierarchical_build.cpp
+ * \brief Implements hixf::hierarchical_build.
+ */
+
 std::set<int64_t> investigate{};
 //robin_hood::unordered_flat_set<size_t> test_hashes{};
 ankerl::unordered_dense::set<size_t> test_hashes{};
+//!\brief See hierarchical_build.hpp for documentation.
 //template <seqan3::data_layout data_layout_mode>
 size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
                           lemon::ListDigraph::Node & current_node,
@@ -36,6 +42,9 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
     
     size_t const ixf_pos{data.request_ixf_idx()};
 
+    // ixf_positions defaults every bin to this node's own temp-file id (ixf_pos); loop_over_children()
+    // overwrites the entries that belong to merged bins with the temp-file id/IXF index of the corresponding
+    // child, so construct_ixf() can later tell, per bin, where to read that bin's hashes from.
     std::vector<int64_t> ixf_positions(current_node_data.number_of_technical_bins, ixf_pos);
     std::vector<int64_t> filename_indices(current_node_data.number_of_technical_bins, -1);
     std::vector<ankerl::unordered_dense::set<size_t>> node_hashes{};
@@ -130,13 +139,17 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
         }
     }
     */
-    // store hashes in parent_hash_set 
+    // store hashes in parent_hash_set
     // only wite hashes to file if parent is root IXF
+    // NOTE: low_mem is always false here (never reassigned), so the `if (low_mem)` branch below is currently
+    // dead code; the `else` branch (building directly from node_hashes) is always taken instead.
     bool low_mem = false;
 
+    // Root and second-level nodes assemble their IXF from per-bin temp hash files written above/by children
+    // (see construct_ixf(data, ...)) rather than from node_hashes, to avoid holding all hashes in memory at once.
     if (is_root || is_second)
     {
-        
+
         auto && ixf = construct_ixf(data, current_node, ixf_positions, is_second, ixf_pos);
 
         // only for debugging
@@ -169,6 +182,8 @@ size_t hierarchical_build(ankerl::unordered_dense::set<size_t> &parent_hashes,
     {
         // for level below root, we store hashes of the IXF in a temp file
         // reduces peak memory
+        // is_third: this node is two levels below the root, so its combined hash set is spilled to disk for
+        // the grandparent (second-level) node to read back later, instead of being kept in `parent_hashes`.
         if (is_third)
         //if (low_mem)
         {

@@ -9,9 +9,28 @@
 #include "fracminhash_model.hpp"
 #include "syncmer_model.hpp"
 
+/*!\file threshold.hpp
+ * \brief Declares hixf::threshold::threshold, the dispatcher that picks which statistical model
+ *        (percentage, k-mer-count, syncmer-match-ratio or FracMinHash) is used to turn a query's number of
+ *        matching hashes into a pass/fail decision when searching the Hierarchical Interleaved XOR Filter.
+ */
 namespace hixf::threshold
 {
 
+/*!\brief Selects and evaluates the appropriate statistical threshold model for a search run.
+ *
+ * Constructed once per search run from a threshold_parameters instance, which chooses one of four
+ * threshold_kinds to use for the whole run:
+ *  - \c percentage: a fixed fraction of the query's hash count is required to match (user-supplied).
+ *  - \c syncmer_model: uses the empirical syncmer-match-ratio lookup table (syncmer_model.hpp).
+ *  - \c kmer_model: uses the k-mer mutation-count confidence-interval model (kmer_model.hpp); selected when
+ *    every window yields exactly one k-mer (no minimiser subsampling) and FracMinHash is not requested.
+ *  - \c fracminhash: uses the FracMinHash containment-index confidence-interval model
+ *    (fracminhash_model.hpp); the fallback for windowed/minimised k-mer sets.
+ *
+ * get() is then called once per query/reference-bin pair (typically from multiple search worker threads) to
+ * compute the minimum number of matching hashes required to call the query a hit.
+ */
 class threshold
 {
 public:
@@ -22,6 +41,11 @@ public:
     threshold & operator=(threshold &&) = default;
     ~threshold() = default;
 
+    /*!\brief Constructs a threshold evaluator, selecting the statistical model to use for this search run.
+     * \param arguments Threshold configuration for this search run (kmer size, error rate, window size, and
+     *                   which model to prefer). See threshold_parameters and the class-level documentation
+     *                   above for the selection order.
+     */
     threshold(threshold_parameters & arguments)
     {
         kmer_size = arguments.kmer_size;
@@ -51,6 +75,17 @@ public:
         }
     }
 
+    /*!\brief Computes the minimum number of matching hashes required to call a query a hit, using whichever
+     *        statistical model was selected in the constructor.
+     * \param minimiser_count Total number of query hashes (k-mers/minimisers/syncmers) considered.
+     * \param scaling_factor  FracMinHash scaling factor; only used by the \c fracminhash model.
+     * \return The match-count threshold: a query/reference-bin pair needs at least this many matching hashes
+     *         to be classified as a hit.
+     *
+     * A small constant false-positive correction (`minimiser_count * 0.0039`) is subtracted for the
+     * \c kmer_model and \c fracminhash cases to compensate for the expected XOR-filter false-positive rate.
+     * The result is always clamped to be non-negative.
+     */
     size_t get(size_t minimiser_count, double scaling_factor) noexcept
     {
         if (minimiser_count == 0)
