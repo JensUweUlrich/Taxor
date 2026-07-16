@@ -310,6 +310,26 @@ cut -f 1,7,20 assembly_summary.txt \
 | cut -f 1,2,3,4,6,7 > refseq_accessions_taxonomy.csv
 
 ```
+
+**Note (2024+ taxdump releases):** NCBI has renamed the "superkingdom" rank to
+"domain" for Bacteria/Archaea/Eukaryota, and Viruses now carry a different
+rank ("acellular root") altogether. Since `taxonkit reformat` builds the
+`k__/p__/.../s__` lineage string by matching the rank literally named
+"superkingdom", the resulting `refseq_accessions_taxonomy.csv` will have an
+empty (or entirely missing) kingdom/domain entry for every organism. Taxor
+itself won't fail on this - the kingdom-level rank will simply be absent from
+the profiling output. To backfill it, run the bundled script, which
+identifies the domain level via stable NCBI taxids (rank-name independent)
+instead of relying on whatever NCBI currently calls the rank:
+
+```
+python3 scripts/fix_kingdom_rank.py \
+    --nodes taxdump/nodes.dmp \
+    --input refseq_accessions_taxonomy.csv \
+    --output refseq_accessions_taxonomy.fixed.csv
+mv refseq_accessions_taxonomy.fixed.csv refseq_accessions_taxonomy.csv
+```
+
 Now we can build the hierarchical interleaved XOR filter (HIXF) index of the reference sequences and the NCBI taxonomy.
 ```
 taxor build --input-file refseq_accessions_taxonomy.csv --input-sequence-dir refseq/2023-03-15_12-56-12/files \

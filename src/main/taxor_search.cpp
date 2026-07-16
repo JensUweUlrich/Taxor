@@ -193,6 +193,11 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
     std::mutex count_mutex;
     double mean_sum{0.0};
     uint16_t reads{0};
+    // Some already-built indexes may have a user bin with no matching species metadata
+    // (a data-integrity bug in the build step, now fixed - see taxor_build.cpp). Rather
+    // than aborting the whole search on the first affected match, skip just that match and
+    // warn once (shared/thread-safe across worker threads) so the user knows to rebuild.
+    std::atomic_flag warned_missing_user_bin = ATOMIC_FLAG_INIT;
     auto worker = [&](size_t const start, size_t const end)
     {
         auto counter = [&index]()
@@ -279,19 +284,35 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
                         max_count = count.second;
                 }
 
+                bool wrote_any = false;
                 for (auto && count : result)
                 {
                     // filter out counts that have less than max_count*0.8 matching hashes
                     if (static_cast<double>(count.second) < static_cast<double>(max_count) * 0.8)
                         continue;
+
+                    auto ub_it = user_bin_index.find(count.first);
+                    if (ub_it == user_bin_index.end())
+                    {
+                        // Known data-integrity issue in some already-built indexes (fixed at
+                        // the source in taxor_build.cpp): a user bin with no matching species
+                        // metadata. Skip this one match instead of aborting the whole search.
+                        if (!warned_missing_user_bin.test_and_set())
+                            std::cerr << "[TAXOR SEARCH WARNING] Index contains a user bin (id "
+                                      << count.first << ") with no matching species metadata; "
+                                      << "skipping affected match(es). Consider rebuilding the index.\n";
+                        continue;
+                    }
+
+                    auto const & species = index.species().at(ub_it->second);
                     result_string += id + '\t';
-                    result_string += index.species().at(user_bin_index.at(count.first)).accession_id;
+                    result_string += species.accession_id;
                     result_string += '\t';
-                    result_string += index.species().at(user_bin_index.at(count.first)).organism_name;
+                    result_string += species.organism_name;
                     result_string += '\t';
-                    result_string += index.species().at(user_bin_index.at(count.first)).taxid;
+                    result_string += species.taxid;
                     result_string += '\t';
-                    result_string += std::to_string(index.species().at(user_bin_index.at(count.first)).seq_len);
+                    result_string += std::to_string(species.seq_len);
                     result_string += '\t';
                     result_string += std::to_string(seq.size());
                     result_string += '\t';
@@ -299,10 +320,21 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
                     result_string += '\t';
                     result_string += std::to_string(count.second);
                     result_string += '\t';
-                    result_string += index.species().at(user_bin_index.at(count.first)).taxnames_string;
+                    result_string += species.taxnames_string;
                     result_string += '\t';
-                    result_string += index.species().at(user_bin_index.at(count.first)).taxid_string;
+                    result_string += species.taxid_string;
                     result_string += '\n';
+                    wrote_any = true;
+                }
+
+                // if every match for this read happened to hit a corrupted/unmapped user
+                // bin, still emit a line for it (as "no match") rather than silently
+                // dropping the read from the output entirely
+                if (!wrote_any)
+                {
+                    result_string += id + '\t';
+                    result_string += "-\t-\t-\t-\t";
+                    result_string += std::to_string(seq.size()) + "\n";
                 }
             }
             count_mutex.lock();
@@ -312,6 +344,7 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
         }
     };
   
+    bool index_load_checked = false;
     for (auto && chunked_records : fin | seqan3::views::chunk(1024))
     {
         records.clear();
@@ -322,8 +355,15 @@ void search_single(hixf::search_arguments & arguments, taxor_index<hixf_t> && in
 
         // future::wait() never propagates exceptions raised in the async task (unlike get()),
         // so a failed/corrupt index load would otherwise pass silently and the search below
-        // would run against a partially-initialized index
-        cereal_handle.get();
+        // would run against a partially-initialized index. future::get() may only be called
+        // once (it consumes the future's shared state), so only do this on the first chunk -
+        // once index loading has completed and been checked, it stays completed for the rest
+        // of the (possibly many) chunks in this loop.
+        if (!index_load_checked)
+        {
+            cereal_handle.get();
+            index_load_checked = true;
+        }
 
         hixf::do_parallel(worker, records.size(), arguments.threads, compute_time);
     }

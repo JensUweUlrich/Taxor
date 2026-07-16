@@ -145,9 +145,9 @@ void sanity_checks(taxor::build::configuration & config)
         {
             std::vector<taxonomy::Species> orgs = taxonomy::parse_refseq_taxonomy_file(f);
         }
-        catch (std::out_of_range const &e)
+        catch (std::exception const &e)
         {
-            throw seqan3::argument_parser_error{"Error parsing the taxonomy file: " + f};    
+            throw seqan3::argument_parser_error{"Error parsing the taxonomy file: " + f + " (" + e.what() + ")"};
         }
     }
 
@@ -270,7 +270,10 @@ inline auto create_filename_clusters(taxor::build::configuration const taxor_con
                                      std::map<std::string, uint64_t> &user_bin_map)
 {
     robin_hood::unordered_map<std::string, std::vector<std::string>> filename_clusters;
-    std::map<std::string, std::filesystem::path> files = file_list<false>(taxor_config.input_folders);
+    // recursive: --input-sequence-dir may contain the genome files nested in
+    // subdirectories rather than directly inside it (e.g. genome_updater's
+    // per-species/per-assembly directory layout)
+    std::map<std::string, std::filesystem::path> files = file_list<true>(taxor_config.input_folders);
     for (uint64_t org_index = 0; org_index < orgs.size(); ++org_index) //auto& species : orgs)
     {
         std::string reg = "^" + orgs[org_index].file_stem + "[\\_a-z]*\\.[a-z\\.]+";
@@ -517,7 +520,24 @@ void build_hixf(taxor::build::configuration const config,
     for (size_t i{0}; i < data.hixf.user_bins.num_user_bins(); ++i)
     {
         bin_path.push_back(std::vector<std::string>{data.hixf.user_bins.filename_of_user_bin(i)});
-        uint64_t org_index = user_bin_map[data.hixf.user_bins.filename_of_user_bin(i)];
+        // .at() (not operator[]): if this filename doesn't exactly match a key inserted
+        // into user_bin_map (e.g. a formatting mismatch surviving the chopper count/layout/
+        // pack round-trip), operator[] would silently default org_index to 0, clobbering
+        // species #0's user_bin assignment and leaving the *actual* owner of this bin
+        // without one - the corruption only surfaces later as an unrelated "map::at" crash
+        // during search, on a different query hit. Fail loudly here instead, at build time.
+        uint64_t org_index;
+        try
+        {
+            org_index = user_bin_map.at(data.hixf.user_bins.filename_of_user_bin(i));
+        }
+        catch (std::out_of_range const &)
+        {
+            throw std::runtime_error{"Could not match built HIXF user bin filename '" +
+                                      data.hixf.user_bins.filename_of_user_bin(i) +
+                                      "' to any input genome file. The index would be built with corrupted "
+                                      "species metadata; aborting instead of silently mis-assigning it."};
+        }
         orgs.at(org_index).user_bin = i;
         orgs.at(org_index).seq_len = 0;
         for (auto && [seq] : sequence_file_t{data.hixf.user_bins.filename_of_user_bin(i)})
@@ -568,10 +588,18 @@ int execute(seqan3::argument_parser & parser)
     std::cout << "parsing taxonomy input files ... " << std::flush;
     std::vector<taxonomy::Species> orgs {};
 
-    for (std::string &f : config.input_files)
+    try
     {
-        std::vector<taxonomy::Species> org_tmp = taxonomy::parse_refseq_taxonomy_file(f);
-        orgs.insert(orgs.end(), org_tmp.begin(), org_tmp.end());
+        for (std::string &f : config.input_files)
+        {
+            std::vector<taxonomy::Species> org_tmp = taxonomy::parse_refseq_taxonomy_file(f);
+            orgs.insert(orgs.end(), org_tmp.begin(), org_tmp.end());
+        }
+    }
+    catch (std::exception const &e)
+    {
+        std::cerr << "[TAXOR BUILD ERROR] " << e.what() << '\n';
+        return -1;
     }
     std::cout << "done!" << std::endl;
 
@@ -590,7 +618,15 @@ int execute(seqan3::argument_parser & parser)
     
     std::cout << "done!" << std::endl;
     std::cout << "building HIXF index ... " << std::flush;
-    build_hixf(config, orgs, user_bin_map);
+    try
+    {
+        build_hixf(config, orgs, user_bin_map);
+    }
+    catch (std::exception const &e)
+    {
+        std::cerr << "[TAXOR BUILD ERROR] " << e.what() << '\n';
+        return -1;
+    }
     std::cout << "done!" << std::endl;
 
     return 0;

@@ -1,4 +1,6 @@
 
+#include <iostream>
+
 #include "parse_ncbi_taxonomy.hpp"
 #include "taxutil.hpp"
 
@@ -29,12 +31,32 @@ namespace taxor::taxonomy
 			if (line.size() > 5)
 				sp.taxid_string = line[5];
 
-			std::size_t found = line.at(2).find_last_of("/\\");
+			// Strip trailing path separators first: NCBI's assembly_summary.txt
+			// ftp_path (and similar directory-style paths) ends in '/', e.g.
+			// ".../GCF_000006685.1_ASM668v1/" - without stripping it,
+			// find_last_of() finds that trailing separator and substr(found+1)
+			// past it returns an empty string, even though the field clearly
+			// does contain a usable path component.
+			std::string path_field = line.at(2);
+			while (!path_field.empty() && (path_field.back() == '/' || path_field.back() == '\\'))
+				path_field.pop_back();
+
+			std::size_t found = path_field.find_last_of("/\\");
 			if (found != std::string::npos)
-				sp.file_stem = line[2].substr(found+1);
+				sp.file_stem = path_field.substr(found+1);
+			else
+				sp.file_stem = path_field; // no separator at all: the whole field is the stem
 			if (sp.file_stem.compare("") == 0 || sp.file_stem.compare(" ") == 0)
-				throw std::runtime_error{"No file name found for" + sp.accession_id + " !!!"};
-			
+			{
+				// No usable file path for this accession (e.g. a withdrawn/suppressed
+				// NCBI assembly with ftp_path "na" in assembly_summary.txt) - there is
+				// no genome to index for it anyway, so skip it instead of aborting the
+				// whole build over one bad row.
+				std::cerr << "[TAXOR BUILD WARNING] Skipping " << sp.accession_id
+						  << ": no file path found in taxonomy input (column 3 has no '/' or '\\').\n";
+				continue;
+			}
+
 			org_list.emplace_back(std::move(sp));
 	 	}
 		return std::move(org_list);
