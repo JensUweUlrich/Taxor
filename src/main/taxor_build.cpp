@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <regex>
 #include <type_traits>
+#include <cmath>
 
 #include <chopper/count/read_data_file.hpp>
 #include <chopper/detail_apply_prefix.hpp>
@@ -261,6 +262,33 @@ size_t determine_best_number_of_technical_bins(chopper::layout::data_store & dat
         global_stats.finalize();
 
         global_stats.print_summary(t_max_64_memory, config.output_verbose_statistics);
+
+        // chopper::layout::hibf_statistics (a vendored, third-party class - not something we can
+        // edit directly, and any local patch to the fetched copy under build/ would be lost on a
+        // clean rebuild) estimates memory assuming an Interleaved BLOOM Filter: its private
+        // compute_bin_size() uses the standard Bloom filter bit-size formula
+        // -n*k / ln(1 - p^(1/k)), driven by config.num_hash_functions (k) and
+        // config.false_positive_rate (p). Taxor actually builds a Hierarchical Interleaved XOR
+        // Filter, whose size does not depend on a target false positive rate or a number of hash
+        // functions at all: an XOR filter needs a fixed ~1.23x overhead over the number of stored
+        // elements (see e.g. XorFilter::XorFilter in xorfilter.hpp), at a constant number of
+        // fingerprint bits per element (8, since every hierarchical_interleaved_xor_filter Taxor
+        // builds uses uint8_t fingerprints - see hixf::hierarchical_interleaved_xor_filter<uint8_t>
+        // in index.hpp/taxor_build.cpp). compute_bin_size() is linear in the number of elements
+        // stored, so the ratio of XOR-filter bits/element to Bloom-filter bits/element rescales
+        // chopper's reported (Bloom filter) byte count into an exact - not approximate - HIXF byte
+        // count, without needing to reimplement chopper's private per-level bin-size aggregation.
+        double const bloom_bits_per_element =
+            -static_cast<double>(config.num_hash_functions) /
+            std::log(1.0 - std::exp(std::log(config.false_positive_rate) / static_cast<double>(config.num_hash_functions)));
+        double constexpr xor_filter_overhead_factor = 1.23; // standard XOR filter fingerprint-array overhead (arrayLength = 32 + 1.23*size)
+        double constexpr xor_fingerprint_bits = 8.0;        // Taxor's HIXF always uses uint8_t fingerprints
+        double const hibf_to_hixf_size_factor = (xor_filter_overhead_factor * xor_fingerprint_bits) / bloom_bits_per_element;
+
+        size_t const hixf_size_bytes =
+            static_cast<size_t>(std::ceil(static_cast<double>(global_stats.total_hibf_size_in_byte()) * hibf_to_hixf_size_factor));
+        std::cout << "# Estimated size for the actual Hierarchical Interleaved XOR Filter (HIXF): "
+                  << chopper::byte_size_to_formatted_str(hixf_size_bytes) << '\n';
 
         // Use result if better than previous one.
         if (global_stats.expected_HIBF_query_cost < best_expected_HIXF_query_cost)
